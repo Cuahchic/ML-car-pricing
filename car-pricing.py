@@ -9,6 +9,8 @@ This is used to scrape car results from Autotrader and analyse them using ML
 
 from bs4 import BeautifulSoup
 import csv
+import random
+import datetime
 
 # Set up all the search parameters, note that many of these are case sensitive
 milesFrom = '100'    # Set to 1500 to see national, can be set to any number (e.g. 157)
@@ -30,6 +32,9 @@ engineSizeTo = '2.2'
 gearbox = 'Automatic'
 keywords = ''        # Any spaces need replaced by %20
 
+# Other parameters useful to us
+seed = datetime.datetime.now().second
+random.seed(seed)
 
 
 # Open file with lots of user agents to choose from, so we can confuse any bot detection algorithms
@@ -63,6 +68,9 @@ def urlBuilder():
     outputURL = outputURL + ('' if (keywords == '') else ('&keywords=' + keywords))
 
     return outputURL
+
+def pickHeader():
+    return random.choice(user_agents)[0]
     
     
     
