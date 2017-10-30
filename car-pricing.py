@@ -6,11 +6,26 @@ Created on Fri Oct 27 14:02:06 2017
 
 This is used to scrape car results from Autotrader and analyse them using ML
 """
-
+# Required libraries
 from bs4 import BeautifulSoup
 import csv
 import random
 import datetime
+import requests
+
+# Logging of http fails
+import logging
+try: # for Python 3
+    from http.client import HTTPConnection
+except ImportError:
+    from requests.packages.urllib3.connectionpool import HTTPConnection
+HTTPConnection.debuglevel = 1
+
+logging.basicConfig()
+logging.getLogger().setLevel(logging.DEBUG)
+requests_log = logging.getLogger("requests.packages.urllib3")
+requests_log.setLevel(logging.DEBUG)
+requests_log.propagate = True
 
 # Set up all the search parameters, note that many of these are case sensitive
 milesFrom = '100'    # Set to 1500 to see national, can be set to any number (e.g. 157)
@@ -43,7 +58,7 @@ with open('UserAgents.csv', 'r') as f:
     user_agents = list(reader)      # Returns this as a list of lists (if the CSV had multiple columns these would be in sublist)
 
 
-
+# Takes the search criteria selected by the user and builds the Autotrader URL to scrape
 def urlBuilder():
     outputURL = 'https://www.autotrader.co.uk/car-search?sort=price-asc'   # Always sort ascending order in price
     
@@ -69,10 +84,27 @@ def urlBuilder():
 
     return outputURL
 
-def pickHeader():
+
+# Randomly choose one of the previously defined user agents
+def pickAgent():
     return random.choice(user_agents)[0]
     
+
+
+def main():
+    # Firstly get a user agent
+    user_agent = pickAgent()
     
+    # Next get URL to query
+    searchURL = urlBuilder()
+    
+    # Now run load webpage
+    response = requests.get(searchURL, headers = {'User-Agent': user_agent})
+
+    # Create soup
+    soup = BeautifulSoup(response.text, "html.parser")
+
+main()
     
     
     
