@@ -13,39 +13,12 @@ import random
 import datetime
 import requests
 import re
+import time
+import secrets
+import psycopg2
 from re import sub
 from decimal import Decimal
-
-
-# Set up all the search parameters, note that many of these are case sensitive
-milesFrom = '100'    # Set to 1500 to see national, can be set to any number (e.g. 157)
-postCode = 'fk27ga'  # No spaces
-carTypes = ['Nearly%20New']  # If multiple are specified here then add each with it's own API parameter. Can choose from New, Used or Nearly New
-make = ''
-model = ''
-modelVariant = ''
-priceFrom = ''
-priceTo = '30000'
-yearFrom = '2016'
-yearTo = ''
-mileageFrom = ''
-mileageTo = '5000'
-bodyType = 'Saloon'
-fuelType = 'Diesel'
-engineSizeFrom = ''
-engineSizeTo = '2.2'
-gearbox = 'Automatic'
-keywords = ''        # Any spaces need replaced by %20
-
-# Other parameters useful to us
-seed = datetime.datetime.now().second
-random.seed(seed)
-
-
-# Open file with lots of user agents to choose from, so we can confuse any bot detection algorithms
-with open('UserAgents.csv', 'r') as f:
-    reader = csv.reader(f)
-    user_agents = list(reader)      # Returns this as a list of lists (if the CSV had multiple columns these would be in sublist)
+import sys
 
 
 # Create a class that we can use to track everything we want to save from each advert
@@ -65,39 +38,107 @@ class advert:
         self.price = Decimal(0)
         self.sellerType = ''
         self.distanceFromYou = 0
-        self.Location = ''
+        self.location = ''
+        self.make = ''
+        self.model = ''
+        self.dealerName = ''
+        self.features = ''
+        self.urbanMPG = 0
+        self.extraUrbanMPG = 0
+        self.averageMPG = 0
+        self.annualTax = Decimal(0)
 
 
+# Create a class to store our search criteria so we can pass it around
+class searchCriteria:
+    def __init__(self):
+        # Set up all the search parameters, note that many of these are case sensitive
+        self.milesFrom = 100    # Set to 1500 to see national, can be set to any number (e.g. 157)
+        self.postCode = 'fk27ga'  # No spaces
+        self.carTypes = ['Nearly%20New']  # If multiple are specified here then add each with it's own API parameter. Can choose from New, Used or Nearly New
+        self.make = ''
+        self.model = ''
+        self.modelVariant = ''
+        self.priceFrom = 0
+        self.priceTo = 30000
+        self.yearFrom = 2016
+        self.yearTo = 1970
+        self.mileageFrom = 0
+        self.mileageTo = 5000
+        self.bodyType = 'Saloon'
+        self.fuelType = 'Diesel'
+        self.engineSizeFrom = 0.0
+        self.engineSizeTo = 2.2
+        self.transmission = 'Automatic'
+        self.keywords = ''        # Any spaces need replaced by %20
+        
+    def toList(self):   # Ensures that the list is always in the same order so when we pass it to a SQL query we know what order to specify the columns
+        l = []
+        
+        l.append(self.milesFrom)
+        l.append(self.postCode)
+        l.append(','.join(self.carTypes).replace('%20', ' '))
+        l.append(self.make)
+        l.append(self.model)
+        l.append(self.modelVariant)
+        l.append(self.priceFrom)
+        l.append(self.priceTo)
+        l.append(self.yearFrom)
+        l.append(self.yearTo)
+        l.append(self.mileageFrom)
+        l.append(self.mileageTo)
+        l.append(self.bodyType)
+        l.append(self.fuelType)
+        l.append(self.engineSizeFrom)
+        l.append(self.engineSizeTo)
+        l.append(self.transmission)
+        l.append(self.keywords)
+        
+        return l
+
+
+# This class stores all the metadata we need for running the program
+class metadata:
+    def __init__(self):
+        self.sessionCreatedTime = ''
+        self.sessionID = 0
+        self.searchCriteriaID = 0
+        
 
 # Takes the search criteria selected by the user and builds the Autotrader URL to scrape
-def urlBuilder():
+def urlBuilder(sc):
     outputURL = 'https://www.autotrader.co.uk/car-search?sort=price-asc'   # Always sort ascending order in price
     
-    outputURL = outputURL + '&radius=' + milesFrom
-    outputURL = outputURL + '&postcode=' + postCode
+    outputURL = outputURL + '&radius=' + sc.milesFrom
+    outputURL = outputURL + '&postcode=' + sc.postCode
     for carType in carTypes:
-        outputURL = outputURL + '&onesearchad=' + carType
-    outputURL = outputURL + ('' if (make == '') else ('&make=' + make))       # If expression (true_output if boolean_condition else false_output)
-    outputURL = outputURL + ('' if (model == '') else ('&model=' + model))
-    outputURL = outputURL + ('' if (modelVariant == '') else ('&aggregatedtrim=' + modelVariant))
-    outputURL = outputURL + ('' if (priceFrom == '') else ('&price-from=' + priceFrom))
-    outputURL = outputURL + ('' if (priceTo == '') else ('&price-to=' + priceTo))
-    outputURL = outputURL + ('' if (yearFrom == '') else ('&year-from=' + yearFrom))
-    outputURL = outputURL + ('' if (yearTo == '') else ('&year-to=' + yearTo))
-    outputURL = outputURL + ('' if (mileageFrom == '') else ('&minimum-mileage=' + mileageFrom))
-    outputURL = outputURL + ('' if (mileageTo == '') else ('&maximum-mileage=' + mileageTo))
-    outputURL = outputURL + ('' if (bodyType == '') else ('&body-type=' + bodyType))
-    outputURL = outputURL + ('' if (fuelType == '') else ('&fuel-type=' + fuelType))
-    outputURL = outputURL + ('' if (engineSizeFrom == '') else ('&minimum-badge-engine-size=' + engineSizeFrom))
-    outputURL = outputURL + ('' if (engineSizeTo == '') else ('&maximum-badge-engine-size=' + engineSizeTo))
-    outputURL = outputURL + ('' if (gearbox == '') else ('&transmission=' + gearbox))
-    outputURL = outputURL + ('' if (keywords == '') else ('&keywords=' + keywords))
+        outputURL = outputURL + '&onesearchad=' + sc.carType
+    outputURL = outputURL + ('' if (sc.make == '') else ('&make=' + sc.make))       # If expression (true_output if boolean_condition else false_output)
+    outputURL = outputURL + ('' if (sc.model == '') else ('&model=' + sc.model))
+    outputURL = outputURL + ('' if (sc.modelVariant == '') else ('&aggregatedtrim=' + sc.modelVariant))
+    outputURL = outputURL + ('' if (sc.priceFrom == Decimal(0)) else ('&price-from=' + str(sc.priceFrom)))
+    outputURL = outputURL + ('' if (sc.priceTo == Decimal(0)) else ('&price-to=' + str(sc.priceTo)))
+    outputURL = outputURL + ('' if (sc.yearFrom == 1970) else ('&year-from=' + str(sc.yearFrom)))
+    outputURL = outputURL + ('' if (sc.yearTo == 1970) else ('&year-to=' + str(sc.yearTo)))
+    outputURL = outputURL + ('' if (sc.mileageFrom == 0) else ('&minimum-mileage=' + str(sc.mileageFrom)))
+    outputURL = outputURL + ('' if (sc.mileageTo == 0) else ('&maximum-mileage=' + str(sc.mileageTo)))
+    outputURL = outputURL + ('' if (sc.bodyType == '') else ('&body-type=' + sc.bodyType))
+    outputURL = outputURL + ('' if (sc.fuelType == '') else ('&fuel-type=' + sc.fuelType))
+    outputURL = outputURL + ('' if (sc.engineSizeFrom == 0.0) else ('&minimum-badge-engine-size=' + str(sc.engineSizeFrom)))
+    outputURL = outputURL + ('' if (sc.engineSizeTo == 0.0) else ('&maximum-badge-engine-size=' + str(sc.engineSizeTo)))
+    outputURL = outputURL + ('' if (sc.transmission == '') else ('&transmission=' + sc.transmission))
+    outputURL = outputURL + ('' if (sc.keywords == '') else ('&keywords=' + sc.keywords))
 
     return outputURL
 
 
 # Randomly choose one of the previously defined user agents
 def pickAgent():
+    # Open file with lots of user agents to choose from, so we can confuse any bot detection algorithms
+    with open('UserAgents.csv', 'r') as f:
+        reader = csv.reader(f)
+        user_agents = list(reader)      # Returns this as a list of lists (if the CSV had multiple columns these would be in sublist)
+    
     return random.choice(user_agents)[0]
 
 
@@ -166,19 +207,88 @@ def parsePage(soup):
         currencyString = priceCol.find('div', attrs = {'class': 'vehicle-price'}).text
         ad.price = Decimal(sub(r'[^\d.]', '', currencyString))
         
-        
         resultsListToReturn.append(ad)
         
     return resultsListToReturn
 
 
+# This begins a new session and saves the session ID for later use
+def initiateSession(md):
+    # Use seconds of current time to seed random package, and return datetime for later use
+    currentTime = datetime.datetime.now()
+    seed = currentTime.second
+    random.seed(seed)
+    
+    sql = 'INSERT INTO car.sessions (searchCriteriaID, sessionCreatedTime, hostName, pythonVersion, codeVersion) VALUES (%s, %s, %s, %s, %s)'
+    
+    conn = psycopg2.connect(host = 'localhost', database = 'car-pricing', user = secrets.username, password = secrets.password)
+    cur = conn.cursor()
+    cur.execute(sql, values)
+    sessionID = cur.fetchone()[0]
+    conn.commit()
+    cur.close()
+    conn.close()
+    
+    md.sessionID = sessionID
+    md.sessionCreatedTime = currentTime
+
+
+# This function starts the process of checking the search criteria and so on
+def initiateSearch(md):
+    sc = searchCriteria()
+    
+    sql = 'SELECT searchCriteriaID FROM car.searchcriteria WHERE milesFrom = %s AND postCode = %s AND carTypes = %s AND make = %s AND model = %s AND modelVariant = %s AND priceFrom = %s AND priceTo = %s AND yearFrom = %s AND yearTo = %s AND mileageFrom = %s AND mileageTo = %s AND bodyType = %s AND fuelType = %s AND engineSizeFrom = %s AND engineSizeTo = %s AND transmission = %s AND keywords = %s'
+    conn = psycopg2.connect(host = 'localhost', database = 'car-pricing', user = secrets.username, password = secrets.password)
+    cur = conn.cursor()
+    cur.execute(sql, sc.toList())
+    result = cur.fetchone()
+    cur.close()
+    conn.close()    
+    
+    if result == None:  # This means the search hasn't previously been run so we need to add it to the database
+        sql = 'INSERT INTO car.searchcriteria (milesFrom, postCode, carTypes, make, model, modelVariant, priceFrom, priceTo, yearFrom, yearTo, mileageFrom, mileageTo, bodyType, fuelType, engineSizeFrom, engineSizeTo, transmission, keywords) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING searchCriteriaID'
+        conn = psycopg2.connect(host = 'localhost', database = 'car-pricing', user = secrets.username, password = secrets.password)
+        cur = conn.cursor()
+        cur.execute(sql, sc.toList())
+        conn.commit()
+        searchCriteriaID = cur.fetchone()[0]
+        cur.close()
+        conn.close()    
+    else:
+        searchCriteriaID = result[0]
+    
+    return (sc, searchCriteriaID)
+
+
+# This function writes all the results we found into the postgres database
+def writeResults(masterResultsList):
+    conn = psycopg2.connect(host = 'localhost', database = 'car-pricing', user = secrets.username, password = secrets.password)
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM INFORMATION_SCHEMA.TABLES")
+    rows = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+
+
 # The main code block we want to run
 def main():
+    # Create a metadata object to use
+    md = metadata()
+    
+    # Instantise the search criteria object
+    tup = initiateSearch(md)
+    sc = tup[0]
+    searchCriteriaID = tup[1]
+    
+    # Initiate a session
+    initiateSession(md)
+    
     # Firstly get a user agent
     user_agent = pickAgent()
     
     # Next get URL to query
-    searchURL = urlBuilder()
+    searchURL = urlBuilder(sc)
     
     # Now run load webpage
     response = requests.get(searchURL, headers = {'User-Agent': user_agent})
@@ -189,11 +299,11 @@ def main():
     # Find pagination results so we know how many pages to iterate through
     maxPages = findMaxPages(soup)
     
-    # Initialise empty results list
-    masterResultsList = []
-    
     # Parse first page
     resultsList = parsePage(soup)
+    
+    # Initialise empty results list, this is the main output
+    masterResultsList = []
     
     # Concatenate lists together
     masterResultsList = masterResultsList + resultsList
@@ -201,16 +311,23 @@ def main():
     if maxPages > 1:
         # Loop through all the pages and add the results to a list
         for pgNum in range(2, maxPages + 1):     # Since Python only goes to less than the latter number
+            # Make a random delay to confuse any bot detection algorithms
+            time.sleep(random.randint(4, 12))
+            
             # Append the page number onto the URL to get subsequent pages
-            currentSearchURL = searchURL + '&page=' + pgNum
+            currentSearchURL = searchURL + '&page=' + str(pgNum)
         
             # Now run load webpage
-            response = requests.get(searchURL, headers = {'User-Agent': user_agent})
+            response = requests.get(currentSearchURL, headers = {'User-Agent': user_agent})
         
             # Create soup
             soup = BeautifulSoup(response.text, "html.parser")
 
-
+            # Parse first page
+            resultsList = parsePage(soup)
+            
+            # Concatenate lists together
+            masterResultsList = masterResultsList + resultsList
 
 
 main()
