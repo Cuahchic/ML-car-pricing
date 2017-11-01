@@ -14,11 +14,15 @@ import datetime
 import requests
 import re
 import time
-import secrets
 import psycopg2
 from re import sub
 from decimal import Decimal
+import socket
 import sys
+import os
+# Ensure we are in the correct directory
+os.chdir("C:/GitWorkspace/ML-car-pricing")
+import database_secrets
 
 
 # Create a class that we can use to track everything we want to save from each advert
@@ -47,12 +51,44 @@ class advert:
         self.extraUrbanMPG = 0
         self.averageMPG = 0
         self.annualTax = Decimal(0)
+        
+    def toList(self, sessionID, foundTime):   # Ensures that the list is always in the same order so when we pass it to a SQL query we know what order to specify the columns
+        l = []
+        
+        l.append(self.adID)
+        l.append(sessionID)
+        l.append(foundTime)
+        l.append(self.adTitle)
+        l.append(self.attentionGrab)
+        l.append(self.year)
+        l.append(self.plate)
+        l.append(self.bodyType)
+        l.append(self.mileage)
+        l.append(self.transmission)
+        l.append(self.engineSize)
+        l.append(self.bhp)
+        l.append(self.fuelType)
+        l.append(self.price)
+        l.append(self.sellerType)
+        l.append(self.distanceFromYou)
+        l.append(self.location)
+        l.append(self.make)
+        l.append(self.model)
+        l.append(self.dealerName)
+        l.append(self.features)
+        l.append(self.urbanMPG)
+        l.append(self.extraUrbanMPG)
+        l.append(self.averageMPG)
+        l.append(self.annualTax)
+        
+        return l
 
 
 # Create a class to store our search criteria so we can pass it around
 class searchCriteria:
     def __init__(self):
         # Set up all the search parameters, note that many of these are case sensitive
+        self.searchName = 'Local automatics'
         self.milesFrom = 100    # Set to 1500 to see national, can be set to any number (e.g. 157)
         self.postCode = 'fk27ga'  # No spaces
         self.carTypes = ['Nearly%20New']  # If multiple are specified here then add each with it's own API parameter. Can choose from New, Used or Nearly New
@@ -75,6 +111,7 @@ class searchCriteria:
     def toList(self):   # Ensures that the list is always in the same order so when we pass it to a SQL query we know what order to specify the columns
         l = []
         
+        l.append(self.searchName)
         l.append(self.milesFrom)
         l.append(self.postCode)
         l.append(','.join(self.carTypes).replace('%20', ' '))
@@ -103,6 +140,8 @@ class metadata:
         self.sessionCreatedTime = ''
         self.sessionID = 0
         self.searchCriteriaID = 0
+        self.user_agent = ''
+        self.maxPages = 0
         
 
 # Takes the search criteria selected by the user and builds the Autotrader URL to scrape
@@ -111,7 +150,7 @@ def urlBuilder(sc):
     
     outputURL = outputURL + '&radius=' + sc.milesFrom
     outputURL = outputURL + '&postcode=' + sc.postCode
-    for carType in carTypes:
+    for carType in sc.carTypes:
         outputURL = outputURL + '&onesearchad=' + sc.carType
     outputURL = outputURL + ('' if (sc.make == '') else ('&make=' + sc.make))       # If expression (true_output if boolean_condition else false_output)
     outputURL = outputURL + ('' if (sc.model == '') else ('&model=' + sc.model))
@@ -219,9 +258,14 @@ def initiateSession(md):
     seed = currentTime.second
     random.seed(seed)
     
-    sql = 'INSERT INTO car.sessions (searchCriteriaID, sessionCreatedTime, hostName, pythonVersion, codeVersion) VALUES (%s, %s, %s, %s, %s)'
+    sql = 'INSERT INTO car.sessions (searchCriteriaID, sessionCreatedTime, hostName, pythonVersion, codeVersion) VALUES (%s, %s, %s, %s, %s) RETURNING sessionID'
     
-    conn = psycopg2.connect(host = 'localhost', database = 'car-pricing', user = secrets.username, password = secrets.password)
+    pythVersionRegex = re.compile(r'[^|]*')
+    pythVersion = pythVersionRegex.search(sys.version)[0].strip()
+    
+    values = [md.searchCriteriaID, currentTime, socket.gethostname(), pythVersion, '1.0.0']
+    
+    conn = psycopg2.connect(host = 'localhost', database = 'car-pricing', user = database_secrets.username, password = database_secrets.password)
     cur = conn.cursor()
     cur.execute(sql, values)
     sessionID = cur.fetchone()[0]
@@ -231,14 +275,16 @@ def initiateSession(md):
     
     md.sessionID = sessionID
     md.sessionCreatedTime = currentTime
+    
+    return md
 
 
 # This function starts the process of checking the search criteria and so on
-def initiateSearch(md):
+def initiateSearch():
     sc = searchCriteria()
     
-    sql = 'SELECT searchCriteriaID FROM car.searchcriteria WHERE milesFrom = %s AND postCode = %s AND carTypes = %s AND make = %s AND model = %s AND modelVariant = %s AND priceFrom = %s AND priceTo = %s AND yearFrom = %s AND yearTo = %s AND mileageFrom = %s AND mileageTo = %s AND bodyType = %s AND fuelType = %s AND engineSizeFrom = %s AND engineSizeTo = %s AND transmission = %s AND keywords = %s'
-    conn = psycopg2.connect(host = 'localhost', database = 'car-pricing', user = secrets.username, password = secrets.password)
+    sql = 'SELECT searchCriteriaID FROM car.searchcriteria WHERE searchName = %s AND milesFrom = %s AND postCode = %s AND carTypes = %s AND make = %s AND model = %s AND modelVariant = %s AND priceFrom = %s AND priceTo = %s AND yearFrom = %s AND yearTo = %s AND mileageFrom = %s AND mileageTo = %s AND bodyType = %s AND fuelType = %s AND engineSizeFrom = %s AND engineSizeTo = %s AND transmission = %s AND keywords = %s'
+    conn = psycopg2.connect(host = 'localhost', database = 'car-pricing', user = database_secrets.username, password = database_secrets.password)
     cur = conn.cursor()
     cur.execute(sql, sc.toList())
     result = cur.fetchone()
@@ -246,8 +292,8 @@ def initiateSearch(md):
     conn.close()    
     
     if result == None:  # This means the search hasn't previously been run so we need to add it to the database
-        sql = 'INSERT INTO car.searchcriteria (milesFrom, postCode, carTypes, make, model, modelVariant, priceFrom, priceTo, yearFrom, yearTo, mileageFrom, mileageTo, bodyType, fuelType, engineSizeFrom, engineSizeTo, transmission, keywords) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING searchCriteriaID'
-        conn = psycopg2.connect(host = 'localhost', database = 'car-pricing', user = secrets.username, password = secrets.password)
+        sql = 'INSERT INTO car.searchcriteria (searchName, milesFrom, postCode, carTypes, make, model, modelVariant, priceFrom, priceTo, yearFrom, yearTo, mileageFrom, mileageTo, bodyType, fuelType, engineSizeFrom, engineSizeTo, transmission, keywords) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING searchCriteriaID'
+        conn = psycopg2.connect(host = 'localhost', database = 'car-pricing', user = database_secrets.username, password = database_secrets.password)
         cur = conn.cursor()
         cur.execute(sql, sc.toList())
         conn.commit()
@@ -261,43 +307,47 @@ def initiateSearch(md):
 
 
 # This function writes all the results we found into the postgres database
-def writeResults(masterResultsList):
-    conn = psycopg2.connect(host = 'localhost', database = 'car-pricing', user = secrets.username, password = secrets.password)
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM INFORMATION_SCHEMA.TABLES")
-    rows = cur.fetchall()
+def writeResults(md, masterResultsList):
+    sql = "INSERT INTO car.carDetails (advertID, sessionID, foundTime, adTitle, attentionGrab, year, plate, bodyType, mileage, transmission, engineSize, bhp, fuelType, price, sellerType, distanceFromYou, location, make, model, dealerName, features, urbanMPG, extraUrbanMPG, averageMPG, annualTax) VALUES ("
+    sql = sql + ('%s, ' * len(masterResultsList[0]))    # Add one %s for each item of the list
+    sql = sql.rstrip(', ') + ')'        # Remove the last comma space                                              
     
-    cur.close()
-    conn.close()
+    for i in range(0, len(masterResultsList)):
+        values = masterResultsList[i].toList(sessionID = md.sessionID, foundTime = datetime.datetime.now())
+        
+        conn = psycopg2.connect(host = 'localhost', database = 'car-pricing', user = database_secrets.username, password = database_secrets.password)
+        cur = conn.cursor()
+        cur.execute(sql, values)
+        conn.commit()        
+        cur.close()
+        conn.close()
 
 
 # The main code block we want to run
-def main():
+def main():    
     # Create a metadata object to use
     md = metadata()
     
     # Instantise the search criteria object
-    tup = initiateSearch(md)
-    sc = tup[0]
-    searchCriteriaID = tup[1]
+    (sc, md.searchCriteriaID) = initiateSearch()
     
     # Initiate a session
-    initiateSession(md)
+    md = initiateSession(md)
     
     # Firstly get a user agent
-    user_agent = pickAgent()
+    md.user_agent = pickAgent()
     
     # Next get URL to query
     searchURL = urlBuilder(sc)
     
     # Now run load webpage
-    response = requests.get(searchURL, headers = {'User-Agent': user_agent})
+    response = requests.get(searchURL, headers = {'User-Agent': md.user_agent})
 
     # Create soup
     soup = BeautifulSoup(response.text, "html.parser")
     
     # Find pagination results so we know how many pages to iterate through
-    maxPages = findMaxPages(soup)
+    md.maxPages = findMaxPages(soup)
     
     # Parse first page
     resultsList = parsePage(soup)
@@ -308,9 +358,9 @@ def main():
     # Concatenate lists together
     masterResultsList = masterResultsList + resultsList
     
-    if maxPages > 1:
+    if md.maxPages > 1:
         # Loop through all the pages and add the results to a list
-        for pgNum in range(2, maxPages + 1):     # Since Python only goes to less than the latter number
+        for pgNum in range(2, md.maxPages + 1):     # Since Python only goes to less than the latter number
             # Make a random delay to confuse any bot detection algorithms
             time.sleep(random.randint(4, 12))
             
@@ -318,16 +368,18 @@ def main():
             currentSearchURL = searchURL + '&page=' + str(pgNum)
         
             # Now run load webpage
-            response = requests.get(currentSearchURL, headers = {'User-Agent': user_agent})
+            response = requests.get(currentSearchURL, headers = {'User-Agent': md.user_agent})
         
             # Create soup
-            soup = BeautifulSoup(response.text, "html.parser")
+            soup = BeautifulSoup(response.text, 'html.parser')
 
             # Parse first page
             resultsList = parsePage(soup)
             
             # Concatenate lists together
             masterResultsList = masterResultsList + resultsList
+    
+    writeResults
 
 
 main()

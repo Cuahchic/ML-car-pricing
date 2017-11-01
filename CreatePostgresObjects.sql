@@ -19,8 +19,10 @@ CREATE TABLE car.sessions (
     codeVersion			VARCHAR(10) NOT NULL
 );
 
+--DROP TABLE car.searchCriteria
 CREATE TABLE car.searchCriteria (
     searchCriteriaID 	serial PRIMARY KEY,
+    searchName			VARCHAR(50) NULL,
     milesFrom			INT NOT NULL,
     postCode			VARCHAR(10) NOT NULL,
     carTypes			VARCHAR(100) NOT NULL,
