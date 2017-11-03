@@ -40,12 +40,14 @@ CREATE TABLE car.searchCriteria (
     engineSizeFrom		FLOAT NULL,
     engineSizeTo		FLOAT NULL,
     transmission		VARCHAR(20) NULL,
-    keywords			VARCHAR(50) NULL
+    keywords			VARCHAR(50) NULL,
+    searchURL			VARCHAR NOT NULL
 );
 
+--DROP TABLE car.carDetails;
 CREATE TABLE car.carDetails (
     carDetailsID		serial PRIMARY KEY,
-    advertID			INT NOT NULL,
+    advertID			BIGINT NOT NULL,
     sessionID			INT NOT NULL,
     foundTime			TIMESTAMP NOT NULL,
     adTitle				VARCHAR(100) NOT NULL,
@@ -69,7 +71,8 @@ CREATE TABLE car.carDetails (
     urbanMPG			FLOAT NULL,
     extraUrbanMPG		FLOAT NULL,
     averageMPG			FLOAT NULL,
-    annualTax			FLOAT NULL
+    annualTax			FLOAT NULL,
+    advertHTML			VARCHAR NOT NULL
 );
 
 

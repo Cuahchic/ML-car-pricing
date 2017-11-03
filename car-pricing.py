@@ -51,6 +51,7 @@ class advert:
         self.extraUrbanMPG = 0
         self.averageMPG = 0
         self.annualTax = Decimal(0)
+        self.advertHTML = ''
         
     def toList(self, sessionID, foundTime):   # Ensures that the list is always in the same order so when we pass it to a SQL query we know what order to specify the columns
         l = []
@@ -80,6 +81,7 @@ class advert:
         l.append(self.extraUrbanMPG)
         l.append(self.averageMPG)
         l.append(self.annualTax)
+        l.append(self.advertHTML)
         
         return l
 
@@ -107,6 +109,7 @@ class searchCriteria:
         self.engineSizeTo = 2.2
         self.transmission = 'Automatic'
         self.keywords = ''        # Any spaces need replaced by %20
+        self.searchURL = self.urlBuilder()
         
     def toList(self):   # Ensures that the list is always in the same order so when we pass it to a SQL query we know what order to specify the columns
         l = []
@@ -130,8 +133,35 @@ class searchCriteria:
         l.append(self.engineSizeTo)
         l.append(self.transmission)
         l.append(self.keywords)
+        l.append(self.searchURL)
         
         return l
+    
+    # Takes the search criteria selected by the user and builds the Autotrader URL to scrape
+    def urlBuilder(self):
+        outputURL = 'https://www.autotrader.co.uk/car-search?sort=price-asc'   # Always sort ascending order in price
+        
+        outputURL = outputURL + '&radius=' + str(self.milesFrom)
+        outputURL = outputURL + '&postcode=' + self.postCode
+        for carType in self.carTypes:
+            outputURL = outputURL + '&onesearchad=' + carType
+        outputURL = outputURL + ('' if (self.make == '') else ('&make=' + self.make))       # If expression (true_output if boolean_condition else false_output)
+        outputURL = outputURL + ('' if (self.model == '') else ('&model=' + self.model))
+        outputURL = outputURL + ('' if (self.modelVariant == '') else ('&aggregatedtrim=' + self.modelVariant))
+        outputURL = outputURL + ('' if (self.priceFrom == Decimal(0)) else ('&price-from=' + str(self.priceFrom)))
+        outputURL = outputURL + ('' if (self.priceTo == Decimal(0)) else ('&price-to=' + str(self.priceTo)))
+        outputURL = outputURL + ('' if (self.yearFrom == 1970) else ('&year-from=' + str(self.yearFrom)))
+        outputURL = outputURL + ('' if (self.yearTo == 1970) else ('&year-to=' + str(self.yearTo)))
+        outputURL = outputURL + ('' if (self.mileageFrom == 0) else ('&minimum-mileage=' + str(self.mileageFrom)))
+        outputURL = outputURL + ('' if (self.mileageTo == 0) else ('&maximum-mileage=' + str(self.mileageTo)))
+        outputURL = outputURL + ('' if (self.bodyType == '') else ('&body-type=' + self.bodyType))
+        outputURL = outputURL + ('' if (self.fuelType == '') else ('&fuel-type=' + self.fuelType))
+        outputURL = outputURL + ('' if (self.engineSizeFrom == 0.0) else ('&minimum-badge-engine-size=' + str(self.engineSizeFrom)))
+        outputURL = outputURL + ('' if (self.engineSizeTo == 0.0) else ('&maximum-badge-engine-size=' + str(self.engineSizeTo)))
+        outputURL = outputURL + ('' if (self.transmission == '') else ('&transmission=' + self.transmission))
+        outputURL = outputURL + ('' if (self.keywords == '') else ('&keywords=' + self.keywords))
+    
+        return outputURL
 
 
 # This class stores all the metadata we need for running the program
@@ -142,33 +172,6 @@ class metadata:
         self.searchCriteriaID = 0
         self.user_agent = ''
         self.maxPages = 0
-        
-
-# Takes the search criteria selected by the user and builds the Autotrader URL to scrape
-def urlBuilder(sc):
-    outputURL = 'https://www.autotrader.co.uk/car-search?sort=price-asc'   # Always sort ascending order in price
-    
-    outputURL = outputURL + '&radius=' + sc.milesFrom
-    outputURL = outputURL + '&postcode=' + sc.postCode
-    for carType in sc.carTypes:
-        outputURL = outputURL + '&onesearchad=' + sc.carType
-    outputURL = outputURL + ('' if (sc.make == '') else ('&make=' + sc.make))       # If expression (true_output if boolean_condition else false_output)
-    outputURL = outputURL + ('' if (sc.model == '') else ('&model=' + sc.model))
-    outputURL = outputURL + ('' if (sc.modelVariant == '') else ('&aggregatedtrim=' + sc.modelVariant))
-    outputURL = outputURL + ('' if (sc.priceFrom == Decimal(0)) else ('&price-from=' + str(sc.priceFrom)))
-    outputURL = outputURL + ('' if (sc.priceTo == Decimal(0)) else ('&price-to=' + str(sc.priceTo)))
-    outputURL = outputURL + ('' if (sc.yearFrom == 1970) else ('&year-from=' + str(sc.yearFrom)))
-    outputURL = outputURL + ('' if (sc.yearTo == 1970) else ('&year-to=' + str(sc.yearTo)))
-    outputURL = outputURL + ('' if (sc.mileageFrom == 0) else ('&minimum-mileage=' + str(sc.mileageFrom)))
-    outputURL = outputURL + ('' if (sc.mileageTo == 0) else ('&maximum-mileage=' + str(sc.mileageTo)))
-    outputURL = outputURL + ('' if (sc.bodyType == '') else ('&body-type=' + sc.bodyType))
-    outputURL = outputURL + ('' if (sc.fuelType == '') else ('&fuel-type=' + sc.fuelType))
-    outputURL = outputURL + ('' if (sc.engineSizeFrom == 0.0) else ('&minimum-badge-engine-size=' + str(sc.engineSizeFrom)))
-    outputURL = outputURL + ('' if (sc.engineSizeTo == 0.0) else ('&maximum-badge-engine-size=' + str(sc.engineSizeTo)))
-    outputURL = outputURL + ('' if (sc.transmission == '') else ('&transmission=' + sc.transmission))
-    outputURL = outputURL + ('' if (sc.keywords == '') else ('&keywords=' + sc.keywords))
-
-    return outputURL
 
 
 # Randomly choose one of the previously defined user agents
@@ -205,6 +208,9 @@ def parsePage(soup):
     
     for j in range(0, len(pageResults)):
         ad = advert()
+        
+        ad.advertHTML = str(pageResults[j])
+        
         contentCol = pageResults[j].find('section', attrs = {'class': 'content-column'})
         priceCol = pageResults[j].find('section', attrs = {'class': 'price-column'})
         
@@ -283,7 +289,7 @@ def initiateSession(md):
 def initiateSearch():
     sc = searchCriteria()
     
-    sql = 'SELECT searchCriteriaID FROM car.searchcriteria WHERE searchName = %s AND milesFrom = %s AND postCode = %s AND carTypes = %s AND make = %s AND model = %s AND modelVariant = %s AND priceFrom = %s AND priceTo = %s AND yearFrom = %s AND yearTo = %s AND mileageFrom = %s AND mileageTo = %s AND bodyType = %s AND fuelType = %s AND engineSizeFrom = %s AND engineSizeTo = %s AND transmission = %s AND keywords = %s'
+    sql = 'SELECT searchCriteriaID FROM car.searchcriteria WHERE searchName = %s AND milesFrom = %s AND postCode = %s AND carTypes = %s AND make = %s AND model = %s AND modelVariant = %s AND priceFrom = %s AND priceTo = %s AND yearFrom = %s AND yearTo = %s AND mileageFrom = %s AND mileageTo = %s AND bodyType = %s AND fuelType = %s AND engineSizeFrom = %s AND engineSizeTo = %s AND transmission = %s AND keywords = %s AND searchURL = %s'
     conn = psycopg2.connect(host = 'localhost', database = 'car-pricing', user = database_secrets.username, password = database_secrets.password)
     cur = conn.cursor()
     cur.execute(sql, sc.toList())
@@ -292,7 +298,7 @@ def initiateSearch():
     conn.close()    
     
     if result == None:  # This means the search hasn't previously been run so we need to add it to the database
-        sql = 'INSERT INTO car.searchcriteria (searchName, milesFrom, postCode, carTypes, make, model, modelVariant, priceFrom, priceTo, yearFrom, yearTo, mileageFrom, mileageTo, bodyType, fuelType, engineSizeFrom, engineSizeTo, transmission, keywords) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING searchCriteriaID'
+        sql = 'INSERT INTO car.searchcriteria (searchName, milesFrom, postCode, carTypes, make, model, modelVariant, priceFrom, priceTo, yearFrom, yearTo, mileageFrom, mileageTo, bodyType, fuelType, engineSizeFrom, engineSizeTo, transmission, keywords, searchURL) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING searchCriteriaID'
         conn = psycopg2.connect(host = 'localhost', database = 'car-pricing', user = database_secrets.username, password = database_secrets.password)
         cur = conn.cursor()
         cur.execute(sql, sc.toList())
@@ -308,8 +314,8 @@ def initiateSearch():
 
 # This function writes all the results we found into the postgres database
 def writeResults(md, masterResultsList):
-    sql = "INSERT INTO car.carDetails (advertID, sessionID, foundTime, adTitle, attentionGrab, year, plate, bodyType, mileage, transmission, engineSize, bhp, fuelType, price, sellerType, distanceFromYou, location, make, model, dealerName, features, urbanMPG, extraUrbanMPG, averageMPG, annualTax) VALUES ("
-    sql = sql + ('%s, ' * len(masterResultsList[0]))    # Add one %s for each item of the list
+    sql = "INSERT INTO car.carDetails (advertID, sessionID, foundTime, adTitle, attentionGrab, year, plate, bodyType, mileage, transmission, engineSize, bhp, fuelType, price, sellerType, distanceFromYou, location, make, model, dealerName, features, urbanMPG, extraUrbanMPG, averageMPG, annualTax, advertHTML) VALUES ("
+    sql = sql + ('%s, ' * len(masterResultsList[0].toList(sessionID = md.sessionID, foundTime = datetime.datetime.now())))    # Add one %s for each item of the list
     sql = sql.rstrip(', ') + ')'        # Remove the last comma space                                              
     
     for i in range(0, len(masterResultsList)):
@@ -337,11 +343,8 @@ def main():
     # Firstly get a user agent
     md.user_agent = pickAgent()
     
-    # Next get URL to query
-    searchURL = urlBuilder(sc)
-    
     # Now run load webpage
-    response = requests.get(searchURL, headers = {'User-Agent': md.user_agent})
+    response = requests.get(sc.searchURL, headers = {'User-Agent': md.user_agent})
 
     # Create soup
     soup = BeautifulSoup(response.text, "html.parser")
@@ -365,7 +368,7 @@ def main():
             time.sleep(random.randint(4, 12))
             
             # Append the page number onto the URL to get subsequent pages
-            currentSearchURL = searchURL + '&page=' + str(pgNum)
+            currentSearchURL = sc.searchURL + '&page=' + str(pgNum)
         
             # Now run load webpage
             response = requests.get(currentSearchURL, headers = {'User-Agent': md.user_agent})
@@ -379,7 +382,7 @@ def main():
             # Concatenate lists together
             masterResultsList = masterResultsList + resultsList
     
-    writeResults
+    writeResults(md, masterResultsList)
 
 
 main()
