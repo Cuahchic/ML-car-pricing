@@ -32,7 +32,7 @@ class advert:
         self.adID = ''
         self.attentionGrab = ''
         self.year = 1970
-        self.plate = 70
+        self.plate = -1
         self.bodyType = ''
         self.mileage = 0
         self.transmission = ''
@@ -222,9 +222,10 @@ def parsePage(soup):
         liTags = contentCol.find('ul', attrs = {'class': 'listing-key-specs'}).findAll('li')
         
         # Regexii for sanity checking the list
-        rYear = re.compile(r'(\d+) \((\d+) reg\)')
+        rYear = re.compile(r'(\d+)( \(\d+ reg\))?')
+        rPlate = re.compile(r'\d+')
         rBodyType = re.compile(r'(convertible|coupe|estate|hatchback|mpv|other|suv|saloon|unlisted)')
-        rMileage = re.compile(r'\d+,\d+ miles')
+        rMileage = re.compile(r'\d+(,\d+)? miles')
         rTransmission = re.compile(r'(manual|automatic)')
         rEngineSizeLitres = re.compile(r'\d+\.\d+l')
         rHorsepowerBHP = re.compile(r'\d+ bhp')
@@ -234,8 +235,16 @@ def parsePage(soup):
             if rYear.search(li.text.lower()) != None:
                 rYearMatches = rYear.match(li.text.lower())
                 
-                ad.year = rYearMatches.groups()[0]
-                ad.plate = rYearMatches.groups()[1]
+                ad.year = int(rYearMatches.groups()[0])
+                
+                fullPlate = rYearMatches.groups()[1]    # This is the group that says ' (66 reg)' for example, we need to extract the number
+                if fullPlate == None:
+                    ad.plate = -1
+                else:
+                    rPlateMatches = rPlate.search(fullPlate)
+                    
+                    ad.plate = int(rPlateMatches[0])
+                
             elif rBodyType.search(li.text.lower()) != None:
                 ad.bodyType = li.text
             elif rMileage.search(li.text.lower()) != None:
@@ -249,13 +258,39 @@ def parsePage(soup):
             elif rFuelType.search(li.text.lower()) != None:
                 ad.fuelType = li.text
         
+        # Get car price information
         currencyString = priceCol.find('div', attrs = {'class': 'vehicle-price'}).text
         ad.price = Decimal(sub(r'[^\d.]', '', currencyString))
+        
+        # Determine if trade or private seller
+        sellerType = contentCol.find('div', attrs = {'class': 'seller-type'}).text.lower()
+        rSellerType = re.compile(r'(trade|private)')
+        ad.sellerType = rSellerType.search(sellerType)[0]
+        
+        # Get distance from specified postcode
+        sellerLocation = contentCol.find('div', attrs = {'class': 'seller-location'})
+        rSellerLocation = re.compile(r'\d+')
+        ad.distanceFromYou = int(rSellerLocation.search(sellerLocation.text)[0])
+        
+        # Get seller town using same bs4 tag as distance above (note that .span finds the first span tag within the parent element, and is shorthand for using .find when there is only one element of that type)
+        ad.location = sellerLocation.span.text
+        
         
         resultsListToReturn.append(ad)
         
     return resultsListToReturn
 
+
+# This function gets all the possible manufacturers from the options on the side
+def buildMakesRegex(soup):
+    makesDiv = soup.find('div', attrs = {'data-temp': 'make-flyout'})
+    
+    makesList = [m.find('span', attrs = {'class': 'term'}).text for m in makesDiv]
+    
+    makesRegex = '|'.join(makesList)
+    
+    return makesRegex
+    
 
 # This begins a new session and saves the session ID for later use
 def initiateSession(md):
