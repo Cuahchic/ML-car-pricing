@@ -14,15 +14,10 @@ import datetime
 import requests
 import re
 import time
-import psycopg2
 from re import sub
 from decimal import Decimal
 import socket
 import sys
-import os
-# Ensure we are in the correct directory
-os.chdir("C:/GitWorkspace/ML-car-pricing")
-import database_secrets
 
 
 # Create a class that we can use to track everything we want to save from each advert
@@ -91,14 +86,14 @@ class searchCriteria:
     def __init__(self):
         # Set up all the search parameters, note that many of these are case sensitive
         self.searchName = 'Local automatics'
-        self.milesFrom = 100    # Set to 1500 to see national, can be set to any number (e.g. 157)
+        self.milesFrom = 200    # Set to 1500 to see national, can be set to any number (e.g. 157)
         self.postCode = 'fk27ga'  # No spaces
         self.carTypes = ['Nearly%20New']  # If multiple are specified here then add each with it's own API parameter. Can choose from New, Used or Nearly New
         self.make = ''
         self.model = ''
         self.modelVariant = ''
         self.priceFrom = 0
-        self.priceTo = 30000
+        self.priceTo = 40000
         self.yearFrom = 2016
         self.yearTo = 1970
         self.mileageFrom = 0
@@ -106,36 +101,67 @@ class searchCriteria:
         self.bodyType = 'Saloon'
         self.fuelType = 'Diesel'
         self.engineSizeFrom = 0.0
-        self.engineSizeTo = 2.2
+        self.engineSizeTo = 0.0
         self.transmission = 'Automatic'
         self.keywords = ''        # Any spaces need replaced by %20
         self.searchURL = self.urlBuilder()
         
-    def toList(self):   # Ensures that the list is always in the same order so when we pass it to a SQL query we know what order to specify the columns
-        l = []
+    def export(self):   # Ensures that the list is always in the same order so when we pass it to a SQL query we know what order to specify the columns
+        e = {}
         
-        l.append(self.searchName)
-        l.append(self.milesFrom)
-        l.append(self.postCode)
-        l.append(','.join(self.carTypes).replace('%20', ' '))
-        l.append(self.make)
-        l.append(self.model)
-        l.append(self.modelVariant)
-        l.append(self.priceFrom)
-        l.append(self.priceTo)
-        l.append(self.yearFrom)
-        l.append(self.yearTo)
-        l.append(self.mileageFrom)
-        l.append(self.mileageTo)
-        l.append(self.bodyType)
-        l.append(self.fuelType)
-        l.append(self.engineSizeFrom)
-        l.append(self.engineSizeTo)
-        l.append(self.transmission)
-        l.append(self.keywords)
-        l.append(self.searchURL)
+        e['Search Name'] = self.searchName
+        e['Miles From'] = self.milesFrom
+        e['Postcode'] = self.postCode
+        e['Car Types'] = ','.join(self.carTypes).replace('%20', ' ')
         
-        return l
+        if (self.make != ''):
+            e['Make'] = self.make
+        
+        if (self.model != ''):
+            e['Model'] = self.model
+        
+        if (self.modelVariant != ''):
+            e['Model Variant'] = self.modelVariant
+        
+        if (self.priceFrom != Decimal(0)):
+            e['Price From'] = self.priceFrom
+            
+        if (self.priceTo != Decimal(0)):
+            e['Price To'] = self.priceTo
+            
+        if (self.yearFrom != 1970):
+            e['Year From'] = self.yearFrom
+            
+        if (self.yearTo != 1970):
+            e['Year To'] = self.yearTo
+        
+        if (self.mileageFrom != 0):
+            e['Mileage From'] = self.mileageFrom
+        
+        if (self.mileageTo != 0):
+            e['Mileage To'] = self.mileageTo
+        
+        if (self.bodyType != ''):
+            e['Body Type'] = self.bodyType
+            
+        if (self.fuelType != ''):
+            e['Fuel Type'] = self.fuelType
+            
+        if (self.engineSizeFrom != 0.0):
+            e['Engine Size From'] = self.engineSizeFrom
+            
+        if (self.engineSizeTo != 0.0):
+            e['Engine Size To'] = self.engineSizeTo
+            
+        if (self.transmission != ''):
+            e['Transmission'] = self.transmission
+            
+        if (self.keywords != ''):
+            e['Keywords'] = self.keywords
+            
+        e['Search URL'] = self.searchURL
+        
+        return e
     
     # Takes the search criteria selected by the user and builds the Autotrader URL to scrape
     def urlBuilder(self):
@@ -167,11 +193,16 @@ class searchCriteria:
 # This class stores all the metadata we need for running the program
 class metadata:
     def __init__(self):
-        self.sessionCreatedTime = ''
-        self.sessionID = 0
-        self.searchCriteriaID = 0
-        self.user_agent = ''
-        self.maxPages = 0
+        self.sessionCreatedTime = datetime.datetime.now()
+        self.user_agent = pickAgent()
+        self.maxPages = 1   # Starts at 1 then is updated later using while loop
+        
+        pythVersionRegex = re.compile(r'[^|]*')
+        pythVersion = pythVersionRegex.search(sys.version)[0].strip()
+        self.pythonVersion = pythVersion
+        
+        self.codeVersion = '1.0.0'
+        self.hostName = socket.gethostname()
 
 
 # Randomly choose one of the previously defined user agents
@@ -207,76 +238,77 @@ def parsePage(soup):
     pageResults = soup.findAll('li', attrs = {'class': 'search-page__result'})
     
     for j in range(0, len(pageResults)):
-        ad = advert()
-        
-        ad.advertHTML = str(pageResults[j])
-        
-        contentCol = pageResults[j].find('section', attrs = {'class': 'content-column'})
-        priceCol = pageResults[j].find('section', attrs = {'class': 'price-column'})
-        
-        ad.adID = pageResults[j].get('id')
-        ad.adTitle = contentCol.find('h2', attrs = {'class': 'listing-title title-wrap'}).text.strip()
-        ad.attentionGrab = contentCol.find('p', attrs = {'class': 'listing-attention-grabber'}).text.strip()
-        
-        # Get unnamed list of attributes
-        liTags = contentCol.find('ul', attrs = {'class': 'listing-key-specs'}).findAll('li')
-        
-        # Regexii for sanity checking the list
-        rYear = re.compile(r'(\d+)( \(\d+ reg\))?')
-        rPlate = re.compile(r'\d+')
-        rBodyType = re.compile(r'(convertible|coupe|estate|hatchback|mpv|other|suv|saloon|unlisted)')
-        rMileage = re.compile(r'\d+(,\d+)? miles')
-        rTransmission = re.compile(r'(manual|automatic)')
-        rEngineSizeLitres = re.compile(r'\d+\.\d+l')
-        rHorsepowerBHP = re.compile(r'\d+ bhp')
-        rFuelType = re.compile(r'(petrol|diesel)')
-        
-        for li in liTags:
-            if rYear.search(li.text.lower()) != None:
-                rYearMatches = rYear.match(li.text.lower())
-                
-                ad.year = int(rYearMatches.groups()[0])
-                
-                fullPlate = rYearMatches.groups()[1]    # This is the group that says ' (66 reg)' for example, we need to extract the number
-                if fullPlate == None:
-                    ad.plate = -1
-                else:
-                    rPlateMatches = rPlate.search(fullPlate)
+        if pageResults[j].find('span', attrs = {'class': 'listings-standout'}) == None: # Adverts with this span class are adverts and should not be included in our results
+            ad = advert()
+            
+            ad.advertHTML = str(pageResults[j])
+            
+            contentCol = pageResults[j].find('section', attrs = {'class': 'content-column'})
+            priceCol = pageResults[j].find('section', attrs = {'class': 'price-column'})
+            
+            ad.adID = pageResults[j].get('id')
+            ad.adTitle = contentCol.find('h2', attrs = {'class': 'listing-title title-wrap'}).text.strip()
+            ad.attentionGrab = contentCol.find('p', attrs = {'class': 'listing-attention-grabber'}).text.strip()
+            
+            # Get unnamed list of attributes
+            liTags = contentCol.find('ul', attrs = {'class': 'listing-key-specs'}).findAll('li')
+            
+            # Regexii for sanity checking the list
+            rYear = re.compile(r'(\d+)( \(\d+ reg\))?')
+            rPlate = re.compile(r'\d+')
+            rBodyType = re.compile(r'(convertible|coupe|estate|hatchback|mpv|other|suv|saloon|unlisted)')
+            rMileage = re.compile(r'\d+(,\d+)? miles')
+            rTransmission = re.compile(r'(manual|automatic)')
+            rEngineSizeLitres = re.compile(r'\d+\.\d+l')
+            rHorsepowerBHP = re.compile(r'\d+ bhp')
+            rFuelType = re.compile(r'(petrol|diesel)')
+            
+            for li in liTags:
+                if rYear.search(li.text.lower()) != None:
+                    rYearMatches = rYear.match(li.text.lower())
                     
-                    ad.plate = int(rPlateMatches[0])
-                
-            elif rBodyType.search(li.text.lower()) != None:
-                ad.bodyType = li.text
-            elif rMileage.search(li.text.lower()) != None:
-                ad.mileage = int(li.text.replace(' miles', '').replace(',', ''))
-            elif rTransmission.search(li.text.lower()) != None:
-                ad.transmission = li.text
-            elif rEngineSizeLitres.search(li.text.lower()) != None:
-                ad.engineSize = float(li.text.replace('L', ''))
-            elif rHorsepowerBHP.search(li.text.lower()) != None:
-                ad.bhp = int(li.text.replace(' bhp', ''))
-            elif rFuelType.search(li.text.lower()) != None:
-                ad.fuelType = li.text
-        
-        # Get car price information
-        currencyString = priceCol.find('div', attrs = {'class': 'vehicle-price'}).text
-        ad.price = Decimal(sub(r'[^\d.]', '', currencyString))
-        
-        # Determine if trade or private seller
-        sellerType = contentCol.find('div', attrs = {'class': 'seller-type'}).text.lower()
-        rSellerType = re.compile(r'(trade|private)')
-        ad.sellerType = rSellerType.search(sellerType)[0]
-        
-        # Get distance from specified postcode
-        sellerLocation = contentCol.find('div', attrs = {'class': 'seller-location'})
-        rSellerLocation = re.compile(r'\d+')
-        ad.distanceFromYou = int(rSellerLocation.search(sellerLocation.text)[0])
-        
-        # Get seller town using same bs4 tag as distance above (note that .span finds the first span tag within the parent element, and is shorthand for using .find when there is only one element of that type)
-        ad.location = sellerLocation.span.text
-        
-        
-        resultsListToReturn.append(ad)
+                    ad.year = int(rYearMatches.groups()[0])
+                    
+                    fullPlate = rYearMatches.groups()[1]    # This is the group that says ' (66 reg)' for example, we need to extract the number
+                    if fullPlate == None:
+                        ad.plate = -1
+                    else:
+                        rPlateMatches = rPlate.search(fullPlate)
+                        
+                        ad.plate = int(rPlateMatches[0])
+                    
+                elif rBodyType.search(li.text.lower()) != None:
+                    ad.bodyType = li.text
+                elif rMileage.search(li.text.lower()) != None:
+                    ad.mileage = int(li.text.replace(' miles', '').replace(',', ''))
+                elif rTransmission.search(li.text.lower()) != None:
+                    ad.transmission = li.text
+                elif rEngineSizeLitres.search(li.text.lower()) != None:
+                    ad.engineSize = float(li.text.replace('L', ''))
+                elif rHorsepowerBHP.search(li.text.lower()) != None:
+                    ad.bhp = int(li.text.replace(' bhp', ''))
+                elif rFuelType.search(li.text.lower()) != None:
+                    ad.fuelType = li.text
+            
+            # Get car price information
+            currencyString = priceCol.find('div', attrs = {'class': 'vehicle-price'}).text
+            ad.price = Decimal(sub(r'[^\d.]', '', currencyString))
+            
+            # Determine if trade or private seller
+            sellerType = contentCol.find('div', attrs = {'class': 'seller-type'}).text.lower()
+            rSellerType = re.compile(r'(trade|private)')
+            ad.sellerType = rSellerType.search(sellerType)[0]
+            
+            # Get distance from specified postcode
+            sellerLocation = contentCol.find('div', attrs = {'class': 'seller-location'})
+            rSellerLocation = re.compile(r'\d+')
+            ad.distanceFromYou = int(rSellerLocation.search(sellerLocation.text)[0])
+            
+            # Get seller town using same bs4 tag as distance above (note that .span finds the first span tag within the parent element, and is shorthand for using .find when there is only one element of that type)
+            if sellerLocation.span != None:
+                ad.location = sellerLocation.span.text
+            
+            resultsListToReturn.append(ad)
         
     return resultsListToReturn
 
@@ -292,63 +324,9 @@ def buildMakesRegex(soup):
     return makesRegex
     
 
-# This begins a new session and saves the session ID for later use
-def initiateSession(md):
-    # Use seconds of current time to seed random package, and return datetime for later use
-    currentTime = datetime.datetime.now()
-    seed = currentTime.second
-    random.seed(seed)
-    
-    sql = 'INSERT INTO car.sessions (searchCriteriaID, sessionCreatedTime, hostName, pythonVersion, codeVersion) VALUES (%s, %s, %s, %s, %s) RETURNING sessionID'
-    
-    pythVersionRegex = re.compile(r'[^|]*')
-    pythVersion = pythVersionRegex.search(sys.version)[0].strip()
-    
-    values = [md.searchCriteriaID, currentTime, socket.gethostname(), pythVersion, '1.0.0']
-    
-    conn = psycopg2.connect(host = 'localhost', database = 'car-pricing', user = database_secrets.username, password = database_secrets.password)
-    cur = conn.cursor()
-    cur.execute(sql, values)
-    sessionID = cur.fetchone()[0]
-    conn.commit()
-    cur.close()
-    conn.close()
-    
-    md.sessionID = sessionID
-    md.sessionCreatedTime = currentTime
-    
-    return md
-
-
-# This function starts the process of checking the search criteria and so on
-def initiateSearch():
-    sc = searchCriteria()
-    
-    sql = 'SELECT searchCriteriaID FROM car.searchcriteria WHERE searchName = %s AND milesFrom = %s AND postCode = %s AND carTypes = %s AND make = %s AND model = %s AND modelVariant = %s AND priceFrom = %s AND priceTo = %s AND yearFrom = %s AND yearTo = %s AND mileageFrom = %s AND mileageTo = %s AND bodyType = %s AND fuelType = %s AND engineSizeFrom = %s AND engineSizeTo = %s AND transmission = %s AND keywords = %s AND searchURL = %s'
-    conn = psycopg2.connect(host = 'localhost', database = 'car-pricing', user = database_secrets.username, password = database_secrets.password)
-    cur = conn.cursor()
-    cur.execute(sql, sc.toList())
-    result = cur.fetchone()
-    cur.close()
-    conn.close()    
-    
-    if result == None:  # This means the search hasn't previously been run so we need to add it to the database
-        sql = 'INSERT INTO car.searchcriteria (searchName, milesFrom, postCode, carTypes, make, model, modelVariant, priceFrom, priceTo, yearFrom, yearTo, mileageFrom, mileageTo, bodyType, fuelType, engineSizeFrom, engineSizeTo, transmission, keywords, searchURL) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING searchCriteriaID'
-        conn = psycopg2.connect(host = 'localhost', database = 'car-pricing', user = database_secrets.username, password = database_secrets.password)
-        cur = conn.cursor()
-        cur.execute(sql, sc.toList())
-        conn.commit()
-        searchCriteriaID = cur.fetchone()[0]
-        cur.close()
-        conn.close()    
-    else:
-        searchCriteriaID = result[0]
-    
-    return (sc, searchCriteriaID)
-
-
 # This function writes all the results we found into the postgres database
 def writeResults(md, masterResultsList):
+    """
     sql = "INSERT INTO car.carDetails (advertID, sessionID, foundTime, adTitle, attentionGrab, year, plate, bodyType, mileage, transmission, engineSize, bhp, fuelType, price, sellerType, distanceFromYou, location, make, model, dealerName, features, urbanMPG, extraUrbanMPG, averageMPG, annualTax, advertHTML) VALUES ("
     sql = sql + ('%s, ' * len(masterResultsList[0].toList(sessionID = md.sessionID, foundTime = datetime.datetime.now())))    # Add one %s for each item of the list
     sql = sql.rstrip(', ') + ')'        # Remove the last comma space                                              
@@ -362,6 +340,8 @@ def writeResults(md, masterResultsList):
         conn.commit()        
         cur.close()
         conn.close()
+    """
+    return 'All done'
 
 
 # The main code block we want to run
@@ -370,54 +350,42 @@ def main():
     md = metadata()
     
     # Instantise the search criteria object
-    (sc, md.searchCriteriaID) = initiateSearch()
-    
-    # Initiate a session
-    md = initiateSession(md)
-    
-    # Firstly get a user agent
-    md.user_agent = pickAgent()
-    
-    # Now run load webpage
-    response = requests.get(sc.searchURL, headers = {'User-Agent': md.user_agent})
-
-    # Create soup
-    soup = BeautifulSoup(response.text, "html.parser")
-    
-    # Find pagination results so we know how many pages to iterate through
-    md.maxPages = findMaxPages(soup)
-    
-    # Parse first page
-    resultsList = parsePage(soup)
+    sc = searchCriteria()
     
     # Initialise empty results list, this is the main output
     masterResultsList = []
     
-    # Concatenate lists together
-    masterResultsList = masterResultsList + resultsList
+    # Loop through all the pages and add the results to a list
+    pgNum = 1
+    while masterResultsList == [] or pgNum < md.maxPages:  # On the first run pgNum = 1 and md.maxPages = 1 but since the master list is empty this will still run first time
+        # Make a random delay to confuse any bot detection algorithms
+        if pgNum > 1:
+            ri = random.randint(4, 12)
+            print('Going for a ' + str(ri) + ' seconds sleep')
+            time.sleep(ri)
+        
+        # Append the page number onto the URL to get subsequent pages
+        currentSearchURL = sc.searchURL + '&page=' + str(pgNum)
     
-    if md.maxPages > 1:
-        # Loop through all the pages and add the results to a list
-        for pgNum in range(2, md.maxPages + 1):     # Since Python only goes to less than the latter number
-            # Make a random delay to confuse any bot detection algorithms
-            time.sleep(random.randint(4, 12))
-            
-            # Append the page number onto the URL to get subsequent pages
-            currentSearchURL = sc.searchURL + '&page=' + str(pgNum)
-        
-            # Now run load webpage
-            response = requests.get(currentSearchURL, headers = {'User-Agent': md.user_agent})
-        
-            # Create soup
-            soup = BeautifulSoup(response.text, 'html.parser')
+        # Now run load webpage
+        response = requests.get(currentSearchURL, headers = {'User-Agent': md.user_agent})
+    
+        # Create soup
+        soup = BeautifulSoup(response.text, 'html.parser')
 
-            # Parse first page
-            resultsList = parsePage(soup)
-            
-            # Concatenate lists together
-            masterResultsList = masterResultsList + resultsList
+        # Parse first page
+        resultsList = parsePage(soup)
+        
+        # Adjust max pages if this is the first run
+        if masterResultsList == []:
+            md.maxPages = findMaxPages(soup)
+        
+        # Concatenate lists together
+        masterResultsList = masterResultsList + resultsList
+        
+        pgNum += 1
     
-    writeResults(md, masterResultsList)
+    print(writeResults(md, masterResultsList))
 
 
 main()
