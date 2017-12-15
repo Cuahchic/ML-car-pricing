@@ -18,6 +18,8 @@ from re import sub
 from decimal import Decimal
 import socket
 import sys
+from urllib.parse import urlparse, parse_qs
+from cassandra.cluster import Cluster
 
 
 # Create a class that we can use to track everything we want to save from each advert
@@ -47,6 +49,7 @@ class advert:
         self.averageMPG = 0
         self.annualTax = Decimal(0)
         self.advertHTML = ''
+        self.thumbnail = None
         
     def toList(self, sessionID, foundTime):   # Ensures that the list is always in the same order so when we pass it to a SQL query we know what order to specify the columns
         l = []
@@ -77,6 +80,7 @@ class advert:
         l.append(self.averageMPG)
         l.append(self.annualTax)
         l.append(self.advertHTML)
+        l.append(self.thumbnail)
         
         return l
 
@@ -307,7 +311,28 @@ def parsePage(soup):
             # Get seller town using same bs4 tag as distance above (note that .span finds the first span tag within the parent element, and is shorthand for using .find when there is only one element of that type)
             if sellerLocation.span != None:
                 ad.location = sellerLocation.span.text
+                
+            # Get the thumbnail image of the car
+            fig = contentCol.find('figure', attrs = {'class': 'listing-main-image'})
             
+            imgSrc = fig.img['src']     # Get image url, but this contains resizing parameters
+            
+            urpa = urlparse(imgSrc)
+            imgID = parse_qs(urpa.query)['id'][0]   # Find the image id so that we can query that without the resizing nonsense
+            
+            imgSrc = imgSrc.replace(urpa.query, '')
+            
+            imgSrc = imgSrc + 'id=' + imgID
+            
+            imgReq = requests.get(imgSrc)
+            
+            thumbnail = None
+            if imgReq.status_code == 200:
+                thumbnail = imgReq.content
+            
+            ad.thumbnail = thumbnail
+            
+            # Add the advert to the overall list to be returned
             resultsListToReturn.append(ad)
         
     return resultsListToReturn
@@ -322,26 +347,29 @@ def buildMakesRegex(soup):
     makesRegex = '|'.join(makesList)
     
     return makesRegex
+
+
+# This function takes the results and puts it into a format that can be insetred into Cassandra
+def buildOutputs(md, sc, ad):
+    
+    return [LIST OF VALUES]
     
 
 # This function writes all the results we found into the postgres database
 def writeResults(md, masterResultsList):
-    """
-    sql = "INSERT INTO car.carDetails (advertID, sessionID, foundTime, adTitle, attentionGrab, year, plate, bodyType, mileage, transmission, engineSize, bhp, fuelType, price, sellerType, distanceFromYou, location, make, model, dealerName, features, urbanMPG, extraUrbanMPG, averageMPG, annualTax, advertHTML) VALUES ("
-    sql = sql + ('%s, ' * len(masterResultsList[0].toList(sessionID = md.sessionID, foundTime = datetime.datetime.now())))    # Add one %s for each item of the list
-    sql = sql.rstrip(', ') + ')'        # Remove the last comma space                                              
+    cluster = Cluster()                         # Connect to local host on default port 9042
+    session = cluster.connect('car_pricing')    # Connect to car_pricing keyspace
     
-    for i in range(0, len(masterResultsList)):
-        values = masterResultsList[i].toList(sessionID = md.sessionID, foundTime = datetime.datetime.now())
-        
-        conn = psycopg2.connect(host = 'localhost', database = 'car-pricing', user = database_secrets.username, password = database_secrets.password)
-        cur = conn.cursor()
-        cur.execute(sql, values)
-        conn.commit()        
-        cur.close()
-        conn.close()
-    """
-    return 'All done'
+    cql = """INSERT INTO visualisation (advertid, foundtime, searchname, searchcriteria, sessioncreatedtime, hostname, pythonversion, codeversion, adtitle, attentiongrab, year, plate, bodytype, mileage, transmission, enginesize, bhp, fueltype, price, sellertype, distancefromyou, location, make, model, dealername, features, urbanmpg, extraurbanmpg, averagempg, annualtax, adverthtml, thumbnail)
+            VALUES ("""
+    cql = cql + ('?, ' * len()) + ');'
+    
+    prepStatement = session.prepare(cql)
+    session.execute(prepStatement, [LIST OF VALUES])    # Need a loop here to handle each advert inside 
+    
+    session.shutdown()
+    
+    return 'Inserted ' + len() + ' rows into the database'
 
 
 # The main code block we want to run
