@@ -222,12 +222,13 @@ def parsePage(soup, md, makesRegex, log):
     for j in range(0, len(pageResults)):
         if pageResults[j].find('span', attrs = {'class': 'listings-standout'}) == None: # Adverts with this span class are adverts and should not be included in our results
             # Make a random delay to confuse any bot detection algorithms now that we are loading sub pages from here
+            msg = 'Advert: ' + str(j + 1) + ' of ' + str(len(pageResults)) + '.'
             if j > 0:
                 ri = random.randint(1, 3)
-                msg = 'Advert: ' + str(j + 1) + ' of ' + str(len(pageResults)) + '. Having a wee ' + str(ri) + ' seconds rest while I load the advert page.'
-                log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
-                print(msg)
+                msg = msg + ' Having a wee ' + str(ri) + ' seconds rest while I load the advert page.'
                 time.sleep(ri)
+            log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
+            print(msg)
             
             # Create advert object to store findings
             ad = advert()
@@ -615,12 +616,13 @@ def main():
         makesRegex = ''
         while masterResultsList == [] or pgNum <= md.maxPages:  # On the first run pgNum = 1 and md.maxPages = 1 but since the master list is empty this will still run first time
             # Make a random delay to confuse any bot detection algorithms
+            msg = 'Search results page: ' + str(pgNum) + ' of ' + str(md.maxPages) + '.'
             if pgNum > 1:
                 ri = random.randint(4, 12)
-                msg = 'Search results page: ' + str(pgNum) + ' of ' + str(md.maxPages) + '. Going for a ' + str(ri) + ' seconds sleep.'
-                log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
-                print(msg)
+                msg = msg + ' Going for a ' + str(ri) + ' seconds sleep.'
                 time.sleep(ri)
+            log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
+            print(msg)
             
             # Append the page number onto the URL to get subsequent pages
             currentSearchURL = sc.searchURL + '&page=' + str(pgNum)
