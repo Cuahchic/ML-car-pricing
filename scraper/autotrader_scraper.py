@@ -59,7 +59,7 @@ class searchCriteria:
     def __init__(self):
         # Set up all the search parameters, note that many of these are case sensitive
         self.searchName = 'Local automatics'
-        self.milesFrom = 100    # Set to 1500 to see national, can be set to any number (e.g. 157)
+        self.milesFrom = 200    # Set to 1500 to see national, can be set to any number (e.g. 157)
         self.postCode = 'fk27ga'  # No spaces
         self.carTypes = ['Nearly%20New']  # If multiple are specified here then add each with it's own API parameter. Can choose from New, Used or Nearly New
         self.make = ''
