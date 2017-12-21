@@ -571,14 +571,15 @@ def writeResults(md, sc, masterResultsList):
         placeholders = ['?' for x in columnList]    # List comprehension and string join is a tidy way to repeat a string the same number of times as another list
         placeholders2 = ','.join(placeholders)
         
-        cql = 'INSERT INTO visualisation (' + cols + ') VALUES (' + placeholders2 + ');'
+        cql = 'INSERT INTO searchdata (' + cols + ') VALUES (' + placeholders2 + ');'
         
-        prepStatement = session.prepare(cql)
-        session.execute(prepStatement, valuesList)    # Need a loop here to handle each advert inside 
+        prepStatement = session.prepare(cql)            # Prepared statement needs to stay inside of the loop as each advert has different available data so will be of differring length
+        session.execute(prepStatement, valuesList)      # Need a loop here to handle each advert inside 
         
         rows += 1
     
     session.shutdown()
+    cluster.shutdown()
     
     return 'Inserted ' + str(rows) + ' rows into the database'
 
@@ -587,12 +588,14 @@ def writeResults(md, sc, masterResultsList):
 def writeLog(log):
     cluster = Cluster()                         # Connect to local host on default port 9042
     session = cluster.connect('car_pricing')    # Connect to car_pricing keyspace
-    
-    for l in log:
-        cql = 'INSERT INTO log (sessioncreatedtime, logtime, message) VALUES (?, ?, ?);'
+    cql = 'INSERT INTO log (sessioncreatedtime, logtime, message) VALUES (?, ?, ?);'    
+    prepStatement = session.prepare(cql)        # Prepared statement only needs sent to server once and be executed multiple times as below, better for performance
         
-        prepStatement = session.prepare(cql)
+    for l in log:
         session.execute(prepStatement, l)
+        
+    session.shutdown()
+    cluster.shutdown()
 
 
 # The main code block we want to run
