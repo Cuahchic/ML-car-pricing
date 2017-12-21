@@ -20,6 +20,7 @@ import socket
 import sys
 from urllib.parse import urlparse, parse_qs
 from cassandra.cluster import Cluster
+import traceback
 
 
 # Create a class that we can use to track everything we want to save from each advert
@@ -58,7 +59,7 @@ class searchCriteria:
     def __init__(self):
         # Set up all the search parameters, note that many of these are case sensitive
         self.searchName = 'Local automatics'
-        self.milesFrom = 200    # Set to 1500 to see national, can be set to any number (e.g. 157)
+        self.milesFrom = 100    # Set to 1500 to see national, can be set to any number (e.g. 157)
         self.postCode = 'fk27ga'  # No spaces
         self.carTypes = ['Nearly%20New']  # If multiple are specified here then add each with it's own API parameter. Can choose from New, Used or Nearly New
         self.make = ''
@@ -70,8 +71,8 @@ class searchCriteria:
         self.yearTo = 1970
         self.mileageFrom = 0
         self.mileageTo = 5000
-        self.bodyType = 'Saloon'
-        self.fuelType = 'Diesel'
+        self.bodyTypes = ['Saloon', 'Estate', 'Coupe', 'Convertible']
+        self.fuelType = ''
         self.engineSizeFrom = 0.0
         self.engineSizeTo = 0.0
         self.transmission = 'Automatic'
@@ -112,10 +113,12 @@ class searchCriteria:
         
         if (self.mileageTo != 0):
             e['Mileage To'] = str(self.mileageTo)
+               
+        if type(self.bodyTypes) is list and len(self.bodyTypes) > 0:
+            e['Body Types'] = ','.join(self.bodyTypes)
+        elif type(self.bodyTypes) is str and len(self.bodyTypes) > 0:
+            e['Body Types'] = self.bodyTypes
         
-        if (self.bodyType != ''):
-            e['Body Type'] = self.bodyType
-            
         if (self.fuelType != ''):
             e['Fuel Type'] = self.fuelType
             
@@ -135,6 +138,7 @@ class searchCriteria:
         
         return e
     
+    
     # Takes the search criteria selected by the user and builds the Autotrader URL to scrape
     def urlBuilder(self):
         outputURL = 'https://www.autotrader.co.uk/car-search?sort=price-asc'   # Always sort ascending order in price
@@ -152,7 +156,13 @@ class searchCriteria:
         outputURL = outputURL + ('' if (self.yearTo == 1970) else ('&year-to=' + str(self.yearTo)))
         outputURL = outputURL + ('' if (self.mileageFrom == 0) else ('&minimum-mileage=' + str(self.mileageFrom)))
         outputURL = outputURL + ('' if (self.mileageTo == 0) else ('&maximum-mileage=' + str(self.mileageTo)))
-        outputURL = outputURL + ('' if (self.bodyType == '') else ('&body-type=' + self.bodyType))
+        
+        if type(self.bodyTypes) is list and len(self.bodyTypes) > 0:
+            for bodyType in self.bodyTypes:
+                outputURL = outputURL + '&body-type=' + bodyType
+        elif type(self.bodyTypes) is str and len(self.bodyTypes) > 0:
+            outputURL = outputURL + '&body-type=' + self.bodyTypes
+        
         outputURL = outputURL + ('' if (self.fuelType == '') else ('&fuel-type=' + self.fuelType))
         outputURL = outputURL + ('' if (self.engineSizeFrom == 0.0) else ('&minimum-badge-engine-size=' + str(self.engineSizeFrom)))
         outputURL = outputURL + ('' if (self.engineSizeTo == 0.0) else ('&maximum-badge-engine-size=' + str(self.engineSizeTo)))
@@ -204,7 +214,7 @@ def findMaxPages(soup):
 
 
 # Take a single results page and scrape it for the relevant information we want to get back, returns a list of objects
-def parsePage(soup, md, makesRegex):
+def parsePage(soup, md, makesRegex, log):
     resultsListToReturn = []
     
     pageResults = soup.findAll('li', attrs = {'class': 'search-page__result'})
@@ -214,7 +224,9 @@ def parsePage(soup, md, makesRegex):
             # Make a random delay to confuse any bot detection algorithms now that we are loading sub pages from here
             if j > 0:
                 ri = random.randint(1, 3)
-                print('Advert: ' + str(j + 1) + ' of ' + str(len(pageResults)) + '. Having a wee ' + str(ri) + ' seconds rest while I load the advert page.')
+                msg = 'Advert: ' + str(j + 1) + ' of ' + str(len(pageResults)) + '. Having a wee ' + str(ri) + ' seconds rest while I load the advert page.'
+                log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
+                print(msg)
                 time.sleep(ri)
             
             # Create advert object to store findings
@@ -236,15 +248,15 @@ def parsePage(soup, md, makesRegex):
             # Regexii for sanity checking the list
             rYear = re.compile(r'(\d+)( \(\d+ reg\))?')
             rPlate = re.compile(r'\d+')
-            rBodyType = re.compile(r'(convertible|coupe|estate|hatchback|mpv|other|suv|saloon|unlisted)')
+            rBodyTypes = re.compile(r'(convertible|coupe|estate|hatchback|mpv|other|suv|saloon|unlisted)')
             rMileage = re.compile(r'\d+(,\d+)? miles')
             rTransmission = re.compile(r'(manual|automatic)')
             rEngineSizeLitres = re.compile(r'\d+\.\d+l')
             rHorsepowerBHP = re.compile(r'\d+ bhp')
-            rFuelType = re.compile(r'(petrol|diesel)')
+            rFuelType = re.compile(r'(petrol|diesel|electric|hybrid)')
             
             for li in liTags:                   
-                if rBodyType.search(li.text.lower()) != None:
+                if rBodyTypes.search(li.text.lower()) != None:
                     ad.bodyType = li.text
                 elif rMileage.search(li.text.lower()) != None:
                     ad.mileage = int(li.text.replace(' miles', '').replace(',', ''))
@@ -463,7 +475,7 @@ def buildOutputs(md, sc, ad):
         valuesList.append(ad.plate)
         
     if ad.bodyType != '':
-        columnList.append('bodytype')
+        columnList.append('bodyType')
         valuesList.append(ad.bodyType)
         
     if ad.mileage != '':
@@ -570,50 +582,78 @@ def writeResults(md, sc, masterResultsList):
     return 'Inserted ' + str(rows) + ' rows into the database'
 
 
+# This function writes the log to the database so we can debug any errors
+def writeLog(log):
+    cluster = Cluster()                         # Connect to local host on default port 9042
+    session = cluster.connect('car_pricing')    # Connect to car_pricing keyspace
+    
+    for l in log:
+        cql = 'INSERT INTO log (sessioncreatedtime, logtime, message) VALUES (?, ?, ?);'
+        
+        prepStatement = session.prepare(cql)
+        session.execute(prepStatement, l)
+
+
 # The main code block we want to run
 def main():    
-    # Create a metadata object to use
-    md = metadata()
+    # Create a log object so we can log all the events and write them to the database
+    log = []
     
-    # Instantise the search criteria object
-    sc = searchCriteria()
     
-    # Initialise empty results list, this is the main output
-    masterResultsList = []
-    
-    # Loop through all the pages and add the results to a list
-    pgNum = 1
-    makesRegex = ''
-    while masterResultsList == [] or pgNum <= md.maxPages:  # On the first run pgNum = 1 and md.maxPages = 1 but since the master list is empty this will still run first time
-        # Make a random delay to confuse any bot detection algorithms
-        if pgNum > 1:
-            ri = random.randint(4, 12)
-            print('Search results page: ' + str(pgNum) + ' of ' + str(md.maxPages) + '. Going for a ' + str(ri) + ' seconds sleep.')
-            time.sleep(ri)
+    try:
+        # Create a metadata object to use
+        md = metadata()
         
-        # Append the page number onto the URL to get subsequent pages
-        currentSearchURL = sc.searchURL + '&page=' + str(pgNum)
-    
-        # Now run load webpage
-        response = requests.get(currentSearchURL, headers = {'User-Agent': md.user_agent})
-    
-        # Create soup
-        soup = BeautifulSoup(response.text, 'html.parser')
+        # Instantise the search criteria object
+        sc = searchCriteria()
         
-        # Adjust max pages and list of makes if this is the first run
-        if masterResultsList == []:
-            md.maxPages = findMaxPages(soup)
-            makesRegex = buildMakesRegex(soup)
+        # Initialise empty results list, this is the main output
+        masterResultsList = []
         
-        # Parse first page
-        resultsList = parsePage(soup, md, makesRegex)
-
-        # Concatenate lists together
-        masterResultsList = masterResultsList + resultsList
+        # Loop through all the pages and add the results to a list
+        pgNum = 1
+        makesRegex = ''
+        while masterResultsList == [] or pgNum <= md.maxPages:  # On the first run pgNum = 1 and md.maxPages = 1 but since the master list is empty this will still run first time
+            # Make a random delay to confuse any bot detection algorithms
+            if pgNum > 1:
+                ri = random.randint(4, 12)
+                msg = 'Search results page: ' + str(pgNum) + ' of ' + str(md.maxPages) + '. Going for a ' + str(ri) + ' seconds sleep.'
+                log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
+                print(msg)
+                time.sleep(ri)
+            
+            # Append the page number onto the URL to get subsequent pages
+            currentSearchURL = sc.searchURL + '&page=' + str(pgNum)
         
-        pgNum += 1
+            # Now run load webpage
+            response = requests.get(currentSearchURL, headers = {'User-Agent': md.user_agent})
+        
+            # Create soup
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Adjust max pages and list of makes if this is the first run
+            if masterResultsList == []:
+                md.maxPages = findMaxPages(soup)
+                makesRegex = buildMakesRegex(soup)
+            
+            # Parse first page
+            resultsList = parsePage(soup, md, makesRegex, log)
     
-    writeResults(md, sc, masterResultsList)
+            # Concatenate lists together
+            masterResultsList = masterResultsList + resultsList
+            
+            pgNum += 1
+        
+        msg = writeResults(md, sc, masterResultsList)
+        log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
+        
+        
+    except Exception as e:
+        msg = ','.join(traceback.format_exception(*sys.exc_info()))
+        log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
+        
+    
+    writeLog(log)
 
 
 # This is where any code runs
