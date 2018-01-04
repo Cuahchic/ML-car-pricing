@@ -44,6 +44,7 @@ class advert:
         self.location = ''
         self.make = ''
         self.model = ''
+        self.modelfull = ''
         self.dealerName = ''
         self.features = ''
         self.urbanMPG = 0
@@ -59,13 +60,13 @@ class searchCriteria:
     def __init__(self):
         # Set up all the search parameters, note that many of these are case sensitive
         self.searchName = 'Local automatics'
-        self.milesFrom = 200    # Set to 1500 to see national, can be set to any number (e.g. 157)
+        self.milesFrom = 100    # Set to 1500 to see national, can be set to any number (e.g. 157)
         self.postCode = 'fk27ga'  # No spaces
         self.carTypes = ['Nearly%20New']  # If multiple are specified here then add each with it's own API parameter. Can choose from New, Used or Nearly New
         self.make = ''
         self.model = ''
         self.modelVariant = ''
-        self.priceFrom = 0
+        self.priceFrom = 15000
         self.priceTo = 40000
         self.yearFrom = 2016
         self.yearTo = 1970
@@ -406,9 +407,21 @@ def pageLevelInfo(md, ad, makesRegex):
     rMakes = re.compile(makesRegex)
     
     ad.make = rMakes.match(ad.adTitle.lower())[0]
-    ad.model = ad.adTitle.lower().replace(ad.make, '').strip()
-
-
+    ad.modelfull = ad.adTitle.lower().replace(ad.make, '').strip()
+    
+    if ad.engineSize > 0:
+        rModelShort = re.compile('^(.*?)' + str(ad.engineSize).replace('.', '\.'))  # Try looking for exact engine size in name
+        rModelShort2 = re.compile('^(.*?)\d\.\d')                                    # Some cars say 2.1L but are actually 2.2L or whatever, so try generic engine size
+        
+        rModelMatches = rModelShort.match(ad.modelfull)
+        
+        if rModelMatches == None:
+            rModelMatches = rModelShort2.match(ad.modelfull)
+        
+        if rModelMatches != None:
+            ad.model = rModelMatches.groups()[0].strip()
+            
+    
 # This function gets all the possible manufacturers from the options on the side
 def buildMakesRegex(soup):
     makesDiv = soup.find('div', attrs = {'data-temp': 'make-flyout'})
@@ -522,6 +535,10 @@ def buildOutputs(md, sc, ad):
     if ad.model != '':
         columnList.append('model')
         valuesList.append(ad.model)
+        
+    if ad.modelfull != '':
+        columnList.append('modelfull')
+        valuesList.append(ad.modelfull)
     
     if ad.dealerName != '':
         columnList.append('dealername')
@@ -618,8 +635,8 @@ def main():
         pgNum = 1
         makesRegex = ''
         while masterResultsList == [] or pgNum <= md.maxPages:  # On the first run pgNum = 1 and md.maxPages = 1 but since the master list is empty this will still run first time
-            # Make a random delay to confuse any bot detection algorithms
-            msg = 'Search results page: ' + str(pgNum) + ' of ' + str(md.maxPages) + '.'
+            # Make a random delay to confuse any bot detection algorithms 
+            msg = 'Search results page: ' + str(pgNum) + ' of ' + ('unknown' if (masterResultsList == []) else (str(md.maxPages))) + '.'
             if pgNum > 1:
                 ri = random.randint(4, 12)
                 msg = msg + ' Going for a ' + str(ri) + ' seconds sleep.'
