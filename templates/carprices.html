@@ -1,0 +1,43 @@
+﻿<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Car price analysis</title>
+    <script src="https://d3js.org/d3.v4.min.js"></script>
+	<script src="{{ url_for('static', filename='tinycolor.js') }}"></script>
+	<script src="{{ url_for('static', filename='jquery-3.2.1.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='jquery-ui.min.js') }}"></script>
+    <link rel="stylesheet" type="text/css"
+      href="https://fonts.googleapis.com/css?family=Open+Sans:400,600">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='carprices.css') }}"/>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='jquery-ui.min.css') }}" />
+  </head>
+  <body>
+    <div id="main">
+	  <div id="titlebit">
+          <span id="titletext">Exploring Car Prices</span>
+	  </div>
+	  <div id="options">
+		  <div id="axisSelectorDiv">
+		  </div>
+	  </div>
+	  <div id="clusters">
+        <div id="xSlider"></div>
+        <div id="ySlider"></div>
+        <div id="clustersChart"></div>
+	  </div>
+
+      <div id="statsDetail">
+          <div id="makesDonut"></div>
+          <div id="locationMap"></div>
+          <div id="adTitle"></div>
+		  <div id="carImage"></div>
+		  <div id="keyFactsTitle"></div>
+		  <div id="keyFacts"></div>
+		  <div id="priceHistoryTitle"></div>
+		  <div id="priceHistory"></div>
+       </div>
+	</div>
+	<script src="{{ url_for('static', filename='carprices.js') }}"></script>
+  </body>
+</html>
