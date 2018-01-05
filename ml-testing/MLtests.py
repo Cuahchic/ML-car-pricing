@@ -90,7 +90,7 @@ scores_rf = cross_val_score(rf, X_test, Y_test, cv = 3, scoring = 'r2')
 gbc = GradientBoostingRegressor(loss = 'huber', n_estimators = 500, max_features = 'sqrt')
 gbc = gbc.fit(X_train, Y_train)
 Y_pred_gbc = gbc.predict(X_test)
-scores_gbc = cross_val_score(gbc, X_test, Y_test, cv = 3)
+scores_gbc = cross_val_score(gbc, X_test, Y_test, cv = 3, scoring = 'r2')
 
 sns.regplot(x = Y_test, y = Y_pred_rf, fit_reg = False)
 sns.regplot(x = Y_test, y = Y_pred_gbc, fit_reg = False)
