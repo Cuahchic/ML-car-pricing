@@ -1,3 +1,4 @@
+
 // Global variables
 var margin = { top: 20, right: 20, bottom: 50, left: 50 },
     basewidth = 565,
@@ -5,25 +6,30 @@ var margin = { top: 20, right: 20, bottom: 50, left: 50 },
     width = basewidth - margin.left - margin.right,
     height = baseheight - margin.top - margin.bottom,
 	
+	leg = {rectSize: 10, rectSpacing: 4, rectTextSize: 11},
+	
 	statsWidth = 278,
     statsHeight = 278,
     statsMargin = { top: 10, right: 10, bottom: 10, left: 10, donutSize: 40 },
     statsRadius = d3.min([statsWidth - statsMargin.left - statsMargin.right, statsHeight - statsMargin.top - statsMargin.bottom]) / 2,
 	
-    svg,
-	allDots,
+	myDuration = 500,
+	totalDonutSize,
+	selectedSearchNameEncoded,
+	keyFacts = [],
+	priceHistory = [],
 	
     xaxis_class,
     yaxis_class,
     xaxislabel,
     yaxislabel,
 	
-	xMin = {},
-    xMax = {},
-    yMin = {},
-    yMax = {},
-	xRange = {},
-	yRange = {},
+	xMin = {"zoom": 0},
+    xMax = {"zoom": 1},
+    yMin = {"zoom": 0},
+    yMax = {"zoom": 1},
+	xRange = {"zoom": 1},
+	yRange = {"zoom": 1},
 	
     xLabel,
     yLabel,
@@ -32,11 +38,22 @@ var margin = { top: 20, right: 20, bottom: 50, left: 50 },
 	
 	plottableColumns = [],
 	data = {},
+	colors = {},
+	pieData = [],
 	
 	freezeMouseover = 0,
 	
-	clustersDiv = d3.select("#clustersChart");
+	svg,
+	donutG,
+	donutMouseOverDiv,
+	allDots,
+	clustersDiv = d3.select("#clustersChart"),
+	carImageImg = d3.select("#carImage").select("img"),
+	adTitleSpan = d3.select("#adTitleText"),
+	keyFactsList = d3.select("#keyFactsList"),
+	priceHistoryList = d3.select("#priceHistoryList");
 
+	
 // setup x 
 var xValue = function (d) { return d[xLabel]; }, // data -> value
     xScale = d3.scaleLinear().range([0, width]), // value -> display, range sets output range, in this case 0 to width
@@ -56,7 +73,7 @@ var arc = d3.arc()
 
 // Set up pie function
 var pie = d3.pie()
-    .value(function (d) { return d[statsMeasure]; });
+    .value(function (d) { return d.count; });
 
 // Read in data
 listSearches();
@@ -70,10 +87,11 @@ $(function () {
         values: [0, 1],
         step: 0.01,
         slide: function (event, ui) {
-            xMin = ui.values[0];
-            xMax = ui.values[1];
-
-            zoom(xMin, xMax, "x");
+			xMin["zoom"] = ui.values[0];
+			xMax["zoom"] = ui.values[1];
+			xRange["zoom"] = xMax["zoom"] - xMin["zoom"];
+			
+			zoom("x");
         }
     });
 });
@@ -87,10 +105,11 @@ $(function () {
         values: [0, 1],
         step: 0.01,
         slide: function (event, ui) {
-            yMin = ui.values[0];
-            yMax = ui.values[1];
-
-            zoom(yMin, yMax, "y");
+			yMin["zoom"] = ui.values[0];
+			yMax["zoom"] = ui.values[1];
+			yRange["zoom"] = yMax["zoom"] - yMin["zoom"];
+			
+			zoom("y");
         }
     });
 });
@@ -156,13 +175,22 @@ function listSearches() {
 function getData() {
 	var chooseSearchName = $("#chooseSearchName");
 	var selectedSearchName = chooseSearchName[0].options[chooseSearchName[0].selectedIndex].text;
+	selectedSearchNameEncoded = encodeURI(selectedSearchName);
 	
-	$.getJSON("/api/getdata/" + encodeURI(selectedSearchName), function (json) {
+	$.getJSON("/api/getdata/" + selectedSearchNameEncoded, function (json) {
 		data = json["data"];
 		plottableColumns = json["plottable_columns"];
 		
+		data.forEach(function(d) {
+			// Format of API output is "Thu, 04 Jan 2018 14:26:52 GMT"
+			var ts = Date.parse(d.foundtime);
+			
+			d["foundtime_date"] = new Date(ts);
+		});
+		
 		populateXandYSelectors();
 		createScattergram();
+		createStatsCharts();
 	});
 }
 
@@ -268,16 +296,21 @@ function getSelectedAxisOptions() {
 
 // Function to scale domains based on min and max values of chosen columns
 function resizeDomains() {
-	xMin = data.reduce(function(prev, curr) { return prev[xLabel] < curr[xLabel] ? prev : curr; })[xLabel];
-	xMax = data.reduce(function(prev, curr) { return prev[xLabel] > curr[xLabel] ? prev : curr; })[xLabel];
-	yMin = data.reduce(function(prev, curr) { return prev[yLabel] < curr[yLabel] ? prev : curr; })[yLabel];
-	yMax = data.reduce(function(prev, curr) { return prev[yLabel] > curr[yLabel] ? prev : curr; })[yLabel];
+	// Set up original values which track the overall ranges based on all the data
+	xMin["orig"] = data.reduce(function(prev, curr) { return prev[xLabel] < curr[xLabel] ? prev : curr; })[xLabel];
+	xMax["orig"] = data.reduce(function(prev, curr) { return prev[xLabel] > curr[xLabel] ? prev : curr; })[xLabel];
+	yMin["orig"] = data.reduce(function(prev, curr) { return prev[yLabel] < curr[yLabel] ? prev : curr; })[yLabel];
+	yMax["orig"] = data.reduce(function(prev, curr) { return prev[yLabel] > curr[yLabel] ? prev : curr; })[yLabel];
 	
-	xRange = xMax - xMin;
-	yRange = yMax - yMin;
+	xRange["orig"] = xMax["orig"] - xMin["orig"];
+	yRange["orig"] = yMax["orig"] - yMin["orig"];
 	
-	xScale.domain([xMin - (0.01 * xRange), xMax + (0.01 * xRange)]);
-    yScale.domain([yMin - (0.01 * yRange), yMax + (0.01 * yRange)]);
+	// Set up adjusted zoomed values for normalised values scaled to the full range of the data
+	calcAdjZoomValues("x");
+	calcAdjZoomValues("y");
+	
+	// Save the total value in the range
+	totalDonutSize = data.length;
 }
 
 
@@ -358,16 +391,59 @@ function mouseover(d) {
 
         // Make the mouseover circle full opacity
         d3.select(this).attr("opacity", 1);
+		
+		// Update the car image
+		var imageAPIURL = '/api/adimage?searchname=' + selectedSearchNameEncoded + '&adid=' + d.advertid;
+		carImageImg.attr("src", imageAPIURL);
+		
+		// Update the advert text
+		adTitleSpan.text(d.adtitle);
+		
+		// Update key facts
+		keyFacts = [];
+		keyFacts.push(String(d.year) + " (" + String(d.plate) + " plate)");
+		keyFacts.push(d.bodytype);
+		keyFacts.push(String(d.mileage) + " miles");
+		keyFacts.push(d.transmission);
+		keyFacts.push(String(d.enginesize.toFixed(1)) + "L");
+		keyFacts.push(d.fueltype);
+		keyFacts.push(d.sellertype + " seller");
+		
+		updateList(keyFactsList, keyFacts);
+		
+		// Update price history
+		priceHistory = [];
+		priceHistory.push("On " + $.datepicker.formatDate('dd M yy', d.foundtime_date) + " price was £" + d.price);
+		
+		updateList(priceHistoryList, priceHistory);
     }
 };
+
 
 // Function to reset page when cursor moved away from circle
 function mouseleave(d) {
     if (freezeMouseover == 0) {
         // Bring all circles back to full opacity
         allDots.attr("opacity", 1);
+		
+		// Update the car image
+		carImageImg.attr("src", "");
+		
+		// Update the advert text
+		adTitleSpan.text("");
+		
+		// Update key facts
+		keyFacts = [];
+		
+		updateList(keyFactsList, keyFacts);
+		
+		// Update price history
+		priceHistory = [];
+		
+		updateList(priceHistoryList, priceHistory);
     };
 };
+
 
 // Function to freeze mouseover text
 function click(d) {
@@ -377,39 +453,346 @@ function click(d) {
 
 
 // Function to zoom axis
-function zoom(begin, end, whichAxis) {
-    // Calculate new tick values for axis
-	var adj_begin = xMin + begin * xRange;		// Begin is in the range [0,1] and represents the fractional slider range, adj_begin converts this into the units of the axis
-	var adj_end = xMax - (1 - end) * xRange;
-	
-    var rng = adj_end - adj_begin;
-    var step = rng / 10;
-    var ticks = [];
-    for (var i = 0; i <= 10; i++) {
-        ticks.push(adj_begin + step * i);
-    }
-
-    // Change scale domain and assign tick values calculated above
+function zoom(whichAxis) {
+    // Change scale domain and assign tick values
     if (whichAxis == "x") {
-        xScale.domain([(-0.01 / 1.02 * rng) + adj_begin, adj_end + (0.01 / 1.02 * rng)]);
-        xAxis.tickValues(ticks);
+		// Calculate new tick values for axis
+		calcAdjZoomValues("x");
+		
         xaxis_class.call(xAxis);
         allDots.attr("cx", xMap);
     }
     else if (whichAxis == "y") {
-        yScale.domain([(-0.01 / 1.02 * rng) + adj_begin, adj_end + (0.01 / 1.02 * rng)]);
-        yAxis.tickValues(ticks);
+		calcAdjZoomValues("y");
+		
         yaxis_class.call(yAxis);
         allDots.attr("cy", yMap);
+    }
+	
+	// Recalculate the data in the window
+	updateStatsCharts();
+}
+
+
+// Function to update the key facts section of the page on mouseover
+function updateList(ulObject, dataList) {	
+	var list = ulObject
+		.selectAll("li")
+		.data(dataList);
+		
+	var listEnter = list.enter().append("li");
+	
+	listEnter
+		.merge(list)
+		.text(function (d) { return d; });
+		
+	list.exit().remove();
+}
+
+
+// Function to calculate the adjusted zoom values based on the original values and the current zoom position
+function calcAdjZoomValues(whichAxis) {
+	if (whichAxis == "x") {
+		xMin["adj_zoom"] = xMin["orig"] + xMin["zoom"] * xRange["orig"];		// xMin["zoom"] is in the range [0,1] and represents the fractional slider range, xMin["adj_zoom"] converts this into the units of the axis
+		xMax["adj_zoom"] = xMax["orig"] - (1 - xMax["zoom"]) * xRange["orig"];
+		
+		xRange["adj_zoom"] = xMax["adj_zoom"] - xMin["adj_zoom"];
+		
+		xScale.domain([(-0.01 / 1.02 * xRange["adj_zoom"]) + xMin["adj_zoom"], xMax["adj_zoom"] + (0.01 / 1.02 * xRange["adj_zoom"])]);
+	}
+	else if (whichAxis == "y") {
+		yMin["adj_zoom"] = yMin["orig"] + yMin["zoom"] * yRange["orig"];
+		yMax["adj_zoom"] = yMax["orig"] - (1 - yMax["zoom"]) * yRange["orig"];
+		
+		yRange["adj_zoom"] = yMax["adj_zoom"] - yMin["adj_zoom"];
+		
+		yScale.domain([(-0.01 / 1.02 * yRange["adj_zoom"]) + yMin["adj_zoom"], yMax["adj_zoom"] + (0.01 / 1.02 * yRange["adj_zoom"])]);
+	}
+}
+
+// Function to create statistics charts
+function createStatsCharts() {
+    // Create SVG element inside div
+	var statChartsDiv = d3.select("#makesDonut");
+	
+	donutG = statChartsDiv
+		.append("svg")
+		.attr("width", statsWidth)
+		.attr("height", statsHeight)
+		.attr("id", "svgMakesDonut")	
+		.append("g")
+		.attr("transform", "translate(" + statsWidth / 2 + "," + statsHeight / 2 + ")");
+
+	donutMouseOverDiv = statChartsDiv
+		.append("div")
+		.attr("class", "donutTooltip")
+		.attr("id", "donutTooltipMakes");
+
+    updateStatsCharts();
+}
+
+
+// Summarise data for statistics plotting
+function summariseData() {
+    var tmp = {};	// Use this to create a dictionary we can turn into an array for plotting
+	pieData = [];	// Reset this variable because the zoom might have changed so we need to recount the relevant makes
+	
+	totalDonutSize = 0;
+	
+	data.forEach(function (d) {
+        if (d[xLabel] >= xMin["adj_zoom"] && d[xLabel] <= xMax["adj_zoom"] && d[yLabel] >= yMin["adj_zoom"] && d[yLabel] <= yMax["adj_zoom"]) {
+			if (typeof (tmp[d.make]) == "undefined") {	// Add the make if we haven't seen it before
+				tmp[d.make] = 0;
+			}
+
+			tmp[d.make] += 1;
+			totalDonutSize += 1;	// Count how many entries are in the zoomable view
+        }
+    });
+
+    // Convert key value pair into array
+	for (var k in tmp) {  // Each k will be a new car make (e.g. Volswagen, BMW, etc)
+		var o = {};
+
+		o["name"] = k;
+		o["count"] = tmp[k];
+
+		pieData.push(o);
+	}
+
+	// Get unique colours for each item only if we haven't done this already, on page load there is no zoom
+	if ($.isEmptyObject(colors)) {
+		colors = generateColours(pieData, "name");
+	}
+}
+
+
+// Function to find key for matching with existing data when new data added/removed
+function key(d) {
+    return d.data.name;
+}
+
+
+// Function to update existing charts
+function updateStatsCharts() {
+    // Generate the up-to-date pie chart data
+	summariseData();
+	
+	//pie.value(function (d) { return d[statsMeasure]; });    // Rebind pie value accessor
+
+	var path = donutG.selectAll("path");        
+
+	var data0 = path.data(),
+		data1 = pie(pieData);
+
+	// Create arc groups
+	path = path.data(data1, key);
+
+	// Remove unneeded entries
+	path
+		.exit()
+		.transition()
+		.duration(myDuration)
+		.attrTween("d", function (d, index) {
+			var currentIndex = this._previous.data.region;
+			var i = d3.interpolateObject(d, this._previous);
+			return function (t) {
+				return arc(i(t));
+			}
+		})
+		.remove();
+
+	pathEnter = path.enter();
+
+	pathEnter
+		.append("path")
+		.each(function (d, i) {
+			var narc = findNeighborArc(i, data0, data1, key);
+			if (narc) {
+				this._current = narc;
+				this._previous = narc;
+			} else {
+				this._current = d;
+				this._previous = d;
+			}
+		})
+		.attr("fill", function (d, i) {
+			return colors[d.data.name];
+		})
+		.attr("class", "dpath")
+		.merge(path)
+		.transition()
+		.duration(myDuration)
+		.attrTween("d", arcTween);
+         
+	donutG.selectAll("path")
+		.on("mousemove", function (d) {
+			var mousePos = d3.mouse(this.parentNode);
+			donutMouseOverDiv.style("left", mousePos[0] + 10 + (statsWidth / 2) + "px");
+			donutMouseOverDiv.style("top", mousePos[1] - 25 + (statsHeight / 2) + "px");
+			donutMouseOverDiv.style("display", "inline-block");
+
+			var displayVal = d.data.count;
+
+			donutMouseOverDiv.html(d.data.name + ": " + displayVal + " (" + d3.format(".1f")(100 * d.data.count / totalDonutSize) + "%)");
+		})
+		.on("mouseout", function (d) {
+			donutMouseOverDiv.style("display", "none");
+		});
+	
+	
+	// Get top 5 entries for legend and decide how to centralise them
+	var top5SortedData = data1.sort(function (a, b) { return b.data.count - a.data.count });
+	var maxElements = Math.min(5, top5SortedData.length);
+	top5SortedData = top5SortedData.slice(0, maxElements);
+	var maxLength = 0;
+	for (var j = 0; j < maxElements; j++) {
+		top5SortedData[j].data.name2 = top5SortedData[j].data.name.substring(0, 22);
+
+		maxLength = Math.max(maxLength, top5SortedData[j].data.name2.length);
+	}
+
+	// Update legend
+	var legend = donutG.selectAll('.legend11').data(top5SortedData, key);
+
+	// Remove unnecessary elements
+	legend.exit().remove();
+
+	// Add new legend entries
+	legendenter = legend.enter().append('g');
+
+	legendenter
+			.attr('class', 'legend11')
+		.merge(legend)
+			.attr('transform', function (d, i) {
+				var height = leg.rectSize + leg.rectSpacing;
+				var offset = height * top5SortedData.length / 2;
+				var horz = -(maxLength * 2 + height);
+				var vert = i * height - offset;
+				return "translate(" + horz + "," + vert + ")";
+			});
+
+	legendenter.append('rect')
+		.attr('width', leg.rectSize)
+		.attr('height', leg.rectSize)
+		.style('fill', function (d) {
+			return colors[d.data.name];
+		});
+
+	legendenter.append('text')
+		.attr('x', leg.rectSize + leg.rectSpacing)
+		.attr('y', "8px")
+		.style("font-size", leg.rectTextSize)
+		.text(function (d) { return d.data.name2; });
+}
+
+
+// Find the arc which adjoins
+function findNeighborArc(i, data0, data1, key) {
+    var d;
+    if (d = findPreceding(i, data0, data1, key)) {
+        var obj = cloneObj(d)
+        obj.startAngle = d.endAngle;
+        return obj;
+    } else if (d = findFollowing(i, data0, data1, key)) {
+        var obj = cloneObj(d)
+        obj.endAngle = d.startAngle;
+        return obj;
+    }
+    return null;
+}
+
+
+// Find the element in data0 that joins the highest preceding element in data1.
+function findPreceding(i, data0, data1, key) {
+    var m = data0.length;
+    while (--i >= 0) {
+        var k = key(data1[i]);
+        for (var j = 0; j < m; ++j) {
+            if (key(data0[j]) === k) return data0[j];
+        }
     }
 }
 
 
+// Find the element in data0 that joins the lowest following element in data1.
+function findFollowing(i, data0, data1, key) {
+    var n = data1.length, m = data0.length;
+    while (++i < n) {
+        var k = key(data1[i]);
+        for (var j = 0; j < m; ++j) {
+            if (key(data0[j]) === k) return data0[j];
+        }
+    }
+}
 
 
+// Determines how to transition from one arc to another
+function arcTween(d) {
+    var i = d3.interpolate(this._current, d);
+    this._current = i(0);
+
+    return function (t) {
+        return arc(i(t))
+    }
+}
 
 
+// Clone an object
+function cloneObj(obj) {
+    var o = {};
+    for (var i in obj) {
+        o[i] = obj[i];
+    }
+    return o;
+}
 
 
+// Create colour palette
+function generateColours(arrayVals, key) {
+    var hueStep = Math.floor(360 / arrayVals.length);
+    var hexStrings = [];
+
+    for (var i = 0; i < arrayVals.length; i++) {
+        var H = i * hueStep;
+        var S = Math.floor(Math.random() * 50) + 30;	// Gives range between 30 and 80
+        var L = Math.floor(Math.random() * 45) + 35;	// Gives range between 35 and 80
+
+        var hslValue = "hsl(" + H + ", " + S + "%, " + L + "%)";
+
+        var hslValueTC = tinycolor(hslValue);
+
+        hexStrings.push(hslValueTC.toHexString());
+    }
+
+    hexStrings = shuffle(hexStrings);		// Randomise array for assignment
+
+    for (var i = 0; i < arrayVals.length; i++) {
+        if (!(arrayVals[i][key] in colors)) {         // Only update colours array if we haven't seen this alarm before
+            colors[arrayVals[i][key]] = hexStrings[i];
+        }
+    }
+
+    return colors;
+};
 
 
+// Function to randomise array, from http://stackoverflow.com/questions/2450954/how-to-randomize-shuffle-a-javascript-array
+function shuffle(array) {
+    var currentIndex = array.length, temporaryValue, randomIndex;
+
+    // While there remain elements to shuffle...
+    while (0 !== currentIndex) {
+
+        // Pick a remaining element...
+        randomIndex = Math.floor(Math.random() * currentIndex);
+        currentIndex -= 1;
+
+        // And swap it with the current element.
+        temporaryValue = array[currentIndex];
+        array[currentIndex] = array[randomIndex];
+        array[randomIndex] = temporaryValue;
+    };
+
+    return array;
+};

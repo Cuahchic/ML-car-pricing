@@ -30,12 +30,26 @@
       <div id="statsDetail">
           <div id="makesDonut"></div>
           <div id="locationMap"></div>
-          <div id="adTitle"></div>
-		  <div id="carImage"></div>
-		  <div id="keyFactsTitle"></div>
-		  <div id="keyFacts"></div>
-		  <div id="priceHistoryTitle"></div>
-		  <div id="priceHistory"></div>
+          <div id="adTitle">
+		    <span id="adTitleText"></span>
+		  </div>
+		  <div id="carImage">
+		    <img id="carImageImg"/>
+		  </div>
+		  <div id="keyFactsTitle">
+			<span id="keyFactsTitleText">Key Facts</span>
+		  </div>
+		  <div id="keyFacts">
+			<ul id="keyFactsList">
+			</ul>
+		  </div>
+		  <div id="priceHistoryTitle">
+			<span id="priceHistoryTitleText">Price History</span>
+		  </div>
+		  <div id="priceHistory">
+			<ul id="priceHistoryList">
+			</ul>
+		  </div>
        </div>
 	</div>
 	<script src="{{ url_for('static', filename='carprices.js') }}"></script>

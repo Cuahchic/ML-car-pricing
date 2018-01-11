@@ -12,11 +12,12 @@ Created on Mon Jan 16 10:32:43 2017
 @author: ColinParr
 """
 
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, send_file, request
 from cassandra.cluster import Cluster
 from urllib import parse
 import pandas as pd
 import datetime
+import io
 
 app = Flask(__name__)
 
@@ -69,7 +70,7 @@ def getdata(searchname):
             adIDs.append(qr[1])
     
     # List columns we want to use as features (or to create features from) and build up cql query
-    colListOther = ['advertid', 'plate', 'bodytype', 'transmission', 'fueltype', 'sellertype', 'make', 'model', 'dealername', 'features', 'adtitle']
+    colListOther = ['advertid', 'plate', 'bodytype', 'transmission', 'fueltype', 'sellertype', 'make', 'model', 'dealername', 'features', 'adtitle', 'foundtime']
     colListPlottable = ['year', 'mileage', 'enginesize', 'bhp', 'price', 'averagempg']
     colListPlottableFriendly = ['Registration Year', 'Mileage (miles)', 'Engine Size (L)', 'Engine Power (BHP)', 'Price (£)', 'Average Fuel Consumption (mpg)']
     cql = 'SELECT ' + ','.join(colListPlottable + colListOther) + ' FROM car_pricing.searchdata WHERE searchname = ? AND advertid = ? LIMIT 1;'
@@ -114,6 +115,36 @@ def compare_dates(advertid):
     diff = today - date
     return diff.days
 
+
+# This API returns an image from a specified advert
+@app.route('/api/adimage', methods=['GET'])
+def getimage():
+    # See https://stackoverflow.com/questions/15182696/multiple-parameters-in-in-flask-approute to understand the requests logic below
+    searchname = request.args.get('searchname', None)
+    adID = request.args.get('adid', None)
+    
+    searchname = parse.unquote(searchname)      # Decode URL, e.g. turn %20 into space etc
+    
+    cluster = Cluster()                         # Connect to local host on default port 9042
+    session = cluster.connect('car_pricing')    # Connect to car_pricing keyspace
+    
+    # Get adIDs into list related to our search name
+    cql = 'SELECT thumbnail FROM car_pricing.searchdata WHERE searchname = ? AND advertid = ?;'
+
+    prepStatement = session.prepare(cql)
+    queryResults = session.execute(prepStatement, [searchname, adID])
+    
+    image_binary = None
+    for qr in queryResults:
+        image_binary = qr[0]
+    
+    session.shutdown()
+    cluster.shutdown()
+    
+    return send_file(io.BytesIO(image_binary),
+                     attachment_filename = 'car.jpg',
+                     mimetype = 'image/jpg')
+    
 
 # Main code
 if __name__ == '__main__':
