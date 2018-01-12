@@ -43,6 +43,12 @@ var margin = { top: 20, right: 20, bottom: 50, left: 50 },
 	
 	freezeMouseover = 0,
 	
+	locationsMap,
+	redIcon,
+	blueIcon,
+	mapMarkers = {},
+	geocoder,
+	
 	svg,
 	donutG,
 	donutMouseOverDiv,
@@ -191,6 +197,7 @@ function getData() {
 		populateXandYSelectors();
 		createScattergram();
 		createStatsCharts();
+		createCarLocationsMap();
 	});
 }
 
@@ -282,6 +289,55 @@ function createScattergram() {
 
     // Get all dots for mouseover
     selectDots();
+}
+
+
+// Function to create the map and set up things for viewing later
+function createCarLocationsMap() {
+	// Create icon objects using https://github.com/pointhi/leaflet-color-markers/blob/master/js/leaflet-color-markers.js
+	redIcon = new L.Icon({
+		iconUrl: 'https://cdn.rawgit.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+		shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+		iconSize: [25, 41],
+		iconAnchor: [12, 41],
+		popupAnchor: [1, -34],
+		shadowSize: [41, 41]
+	});
+	
+	blueIcon = new L.Icon({
+		iconUrl: 'https://cdn.rawgit.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+		shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+		iconSize: [25, 41],
+		iconAnchor: [12, 41],
+		popupAnchor: [1, -34],
+		shadowSize: [41, 41]
+	});
+	
+	// Initialise the map and give it an image layer provided by OpenStreetMap
+	locationsMap = L.map('locationMap').setView([54.357,-2.215], 5);
+	
+	L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+		maxZoom: 19,
+		attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+	}).addTo(locationsMap);
+	
+	// Initialise geocoder
+	geocoder = new L.Control.Geocoder.Nominatim();
+	
+	// Get the users home location coordinates using geolookup, see https://stackoverflow.com/questions/30934341/leaflet-geosearch-get-lon-lat-from-address
+	var postCode = data[0].searchcriteria.Postcode;
+	
+	postCode = postCode.substring(0, postCode.length - 3) + ' ' + postCode.substring(postCode.length - 3, postCode.length)	// Put a space in the postcode
+	
+	geocoder.geocode(postCode, function(results) {
+		var latLng = new L.LatLng(results[0].center.lat, results[0].center.lng);
+		var homeMarker = new L.Marker(latLng, {draggable:false, icon: blueIcon});
+		locationsMap.addLayer(homeMarker);
+		
+		homeMarker.bindPopup("Home").openPopup();
+		
+		mapMarkers["home"] = homeMarker;
+	});
 }
 
 
@@ -392,6 +448,32 @@ function mouseover(d) {
         // Make the mouseover circle full opacity
         d3.select(this).attr("opacity", 1);
 		
+		// Show car location on map		
+		var locationFull = d.location + ", United Kingdom";		// Prevents showing of locations in other countries (e.g. Perth, Australia)
+		
+		geocoder.geocode(locationFull, function(results) {
+			// Remove any lingering markers
+			for (var key in mapMarkers) {
+				if (key != "home") {
+					locationsMap.removeLayer(mapMarkers[key]);
+					
+					delete mapMarkers[key];
+				}
+			}
+			
+			// Add new markers
+			var adKey = d.searchcriteria["Search Name"] + " " + d.advertid;
+			
+			var latLng = new L.LatLng(results[0].center.lat, results[0].center.lng);
+			
+			mapMarkers[adKey] = new L.Marker(latLng, {draggable:false, icon: redIcon});
+			locationsMap.addLayer(mapMarkers[adKey]);
+			
+			var popupText = "Car</br>" + String(d.distancefromyou) + " miles away</br>" + d.location.charAt(0).toUpperCase() + d.location.slice(1);
+			
+			mapMarkers[adKey].bindPopup(popupText).openPopup();
+		});
+		
 		// Update the car image
 		var imageAPIURL = '/api/adimage?searchname=' + selectedSearchNameEncoded + '&adid=' + d.advertid;
 		carImageImg.attr("src", imageAPIURL);
@@ -441,6 +523,15 @@ function mouseleave(d) {
 		priceHistory = [];
 		
 		updateList(priceHistoryList, priceHistory);
+		
+		// Remove marker for car
+		var adKey = d.searchcriteria["Search Name"] + " " + d.advertid;
+		
+		if (typeof(mapMarkers[adKey]) != "undefined") {
+			locationsMap.removeLayer(mapMarkers[adKey]);
+		}
+		
+		delete mapMarkers[adKey];
     };
 };
 

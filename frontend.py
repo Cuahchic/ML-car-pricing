@@ -14,6 +14,7 @@ Created on Mon Jan 16 10:32:43 2017
 
 from flask import Flask, jsonify, render_template, send_file, request
 from cassandra.cluster import Cluster
+from cassandra.util import OrderedMapSerializedKey
 from urllib import parse
 import pandas as pd
 import datetime
@@ -70,7 +71,7 @@ def getdata(searchname):
             adIDs.append(qr[1])
     
     # List columns we want to use as features (or to create features from) and build up cql query
-    colListOther = ['advertid', 'plate', 'bodytype', 'transmission', 'fueltype', 'sellertype', 'make', 'model', 'dealername', 'features', 'adtitle', 'foundtime']
+    colListOther = ['advertid', 'plate', 'bodytype', 'transmission', 'fueltype', 'sellertype', 'make', 'model', 'dealername', 'location', 'searchcriteria', 'distancefromyou', 'features', 'adtitle', 'foundtime']
     colListPlottable = ['year', 'mileage', 'enginesize', 'bhp', 'price', 'averagempg']
     colListPlottableFriendly = ['Registration Year', 'Mileage (miles)', 'Engine Size (L)', 'Engine Power (BHP)', 'Price (£)', 'Average Fuel Consumption (mpg)']
     cql = 'SELECT ' + ','.join(colListPlottable + colListOther) + ' FROM car_pricing.searchdata WHERE searchname = ? AND advertid = ? LIMIT 1;'
@@ -83,7 +84,8 @@ def getdata(searchname):
     for adID in adIDs:     # Query to get the latest information (latest data gathering time) for each advert
         queryResults = session.execute(prepStatement, [searchname, adID])
         
-        df_D3data = df_D3data.append(pd.DataFrame(data = [list(queryResults[0])], columns = (colListPlottable + colListOther)))   # Note that list is embedded in another list
+        #df_D3data = df_D3data.append(pd.DataFrame(data = [list(queryResults[0])], columns = (colListPlottable + colListOther)))   # Note that list is embedded in another list
+        df_D3data = df_D3data.append(pandas_factory((colListPlottable + colListOther), queryResults))
         
     # Add advert age to the data frame
     df_D3data['advertage_days'] = df_D3data['advertid'].apply(compare_dates)
@@ -145,6 +147,23 @@ def getimage():
                      attachment_filename = 'car.jpg',
                      mimetype = 'image/jpg')
     
+
+# Convert results into data frame including any maps (stolen from https://stackoverflow.com/questions/42420260/how-to-convert-cassandra-map-to-pandas-dataframe)
+def pandas_factory(colnames, rows):
+    # Convert tuple items of 'rows' into list (elements of tuples cannot be replaced)
+    rows = [list(i) for i in rows]
+
+    # Convert only 'OrderedMapSerializedKey' type list elements into dict
+    for idx_row, i_row in enumerate(rows):
+
+        for idx_value, i_value in enumerate(i_row):
+
+            if type(i_value) is OrderedMapSerializedKey:
+
+                rows[idx_row][idx_value] = dict(rows[idx_row][idx_value])
+
+    return pd.DataFrame(rows, columns=colnames)
+
 
 # Main code
 if __name__ == '__main__':
