@@ -1,44 +1,74 @@
-#main {
-  font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+* {
+  -webkit-box-sizing: border-box;
+     -moz-box-sizing: border-box;
+          box-sizing: border-box;
+}
+
+body {
+  font-family: "Arial Unicode MS", "Helvetica Neue", Helvetica, sans-serif;
   font-size: 12px;
   font-weight: 400;
-  width: 1500px;
+  color: white;
+  width: 1200px;
   height: 900px;
+  background-color: rgb(30,30,30);
 }
 
-#titletext {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translateX(-50%) translateY(-50%);
-    width: 600px;
-    text-align: center;
+.col1 {
+	left: 20px;
 }
 
-#titlebit {
-  position: absolute;
-  top: 0px;
-  left: 0px;
-  width: 600px;
-  height: 50px;
-  font-size: 24px;
-  font-weight: 800;
+.col2 {
+	left: 320px;
 }
 
-#options {
-  position: absolute;
-  top: 50px;
-  left: 0px;
-  width: 600px;
-  height: 250px;
+.col3 {
+	left: 620px;
 }
 
-#clusters {
-  position: absolute;
-  top: 300px;
-  left: 0px;
-  width: 600px;
-  height: 600px;
+.col4 {
+	left: 920px;
+}
+
+.row1 {
+	top: 20px;
+}
+
+.row2 {
+	top: 320px;
+}
+
+.row3 {
+	top: 620px;
+}
+
+.width1 {
+	width: 280px;
+}
+
+.width2 {
+	width: 580px;
+}
+
+.width3 {
+	width: 880px;
+}
+
+.height1 {
+	height: 280px;
+}
+
+.height2 {
+	height: 580px;
+}
+
+.height3 {
+	height: 880px;
+}
+
+.raisedbox {
+	position: absolute;
+	background-color: rgb(45,45,45);
 }
 
 .dpath {
@@ -53,13 +83,14 @@
 
 .axis path, .axis line {
   fill: none;
-  stroke: #000;
+  stroke: white;
   shape-rendering: crispEdges;
 }
 
 .dot {
   stroke: #000;
-  fill: cornflowerblue;
+  fill: GreenYellow;
+  r: 2.5px;
 }
 
 .axislabel {
@@ -85,89 +116,8 @@
     height: 480px;
 }
 
-#clustersChart {
-  position: absolute;
-  top: 0px;
-  left: 35px;
-  display: inline;
-  width: 565px;
-  height: 565px;
-}
-
 .ui-slider-handle {
     font-size: 22px;
-}
-
-#statsDetail {
-    position: absolute;
-    top: 0px;
-    left: 600px;
-    width: 900px;
-    height: 900px;
-}
-
-#makesDonut {
-    position: absolute;
-	top: 0px;
-	left: 0px;
-    width: 300px;
-    height: 300px;
-}
-
-#locationMap {
-    position: absolute;
-	top: 0px;
-	left: 300px;
-    width: 600px;
-    height: 300px;
-}
-
-#adTitle {
-    position: absolute;
-	top: 300px;
-	left: 0px;
-    width: 900px;
-    height: 50px;
-}
-
-#carImage {
-    position: absolute;
-	top: 350px;
-	left: 0px;
-    width: 300px;
-    height: 550px;
-}
-
-#keyFactsTitle {
-    position: absolute;
-	top: 350px;
-	left: 300px;
-    width: 300px;
-    height: 50px;
-}
-
-#priceHistoryTitle {
-    position: absolute;
-	top: 350px;
-	left: 600px;
-    width: 300px;
-    height: 50px;
-}
-
-#keyFacts {
-    position: absolute;
-	top: 400px;
-	left: 300px;
-    width: 300px;
-    height: 500px;
-}
-
-#priceHistory {
-    position: absolute;
-	top: 400px;
-	left: 600px;
-    width: 300px;
-    height: 500px;
 }
 
 .donutTooltip {
@@ -187,19 +137,12 @@
     z-index: 1000;
 }
 
-#keyFactsTitleText, #priceHistoryTitleText {
-	position: absolute;
-	width: 300px;
-    top: 50%;
-    left: 50%;
-    transform: translateX(-50%) translateY(-50%);
-	font-size: 18px;
-	font-weight: 600;
-	text-align: center;
-}
-
 #carImageImg {
+	display: inline-block;
 	position: absolute;
+	padding-left: 5px;
+	padding-right: 5px;
+	padding-top: 40px;
 	max-width: 100%;
     max-height: 100%;
 	top: 50%;
@@ -207,19 +150,37 @@
     transform: translateX(-50%) translateY(-50%);
 }
 
-#adTitleText {
-	position: absolute;
-	width: 900px;
-    top: 50%;
-    left: 50%;
-    transform: translateX(-50%) translateY(-50%);
-	font-size: 20px;
-	font-weight: 700;
-	text-align: center;
+.raisedboxtitle {
+	font-size: 25px;
+	margin-left: 10px;
+	margin-top: 10px;
+	display: inline-block;
+}	
+
+.content {
+	margin-left: 5px;
+	margin-top: 5px;
+}
+
+.widthc1 {
+	width: 270px;
+}
+
+.heightc1 {
+	height: 240px;
+}
+
+.heightc3 {
+	height: 830px;
 }
 
 #keyFactsList, #priceHistoryList {
 	font-size: 16px;
+}
+
+svg#svgMakesDonut {
+	margin-left: 15px;
+	margin-top: -8px;
 }
 
 

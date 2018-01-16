@@ -8,8 +8,8 @@ var margin = { top: 20, right: 20, bottom: 50, left: 50 },
 	
 	leg = {rectSize: 10, rectSpacing: 4, rectTextSize: 11},
 	
-	statsWidth = 278,
-    statsHeight = 278,
+	statsWidth = 240,
+    statsHeight = 240,
     statsMargin = { top: 10, right: 10, bottom: 10, left: 10, donutSize: 40 },
     statsRadius = d3.min([statsWidth - statsMargin.left - statsMargin.right, statsHeight - statsMargin.top - statsMargin.bottom]) / 2,
 	
@@ -54,7 +54,7 @@ var margin = { top: 20, right: 20, bottom: 50, left: 50 },
 	donutMouseOverDiv,
 	allDots,
 	clustersDiv = d3.select("#clustersChart"),
-	carImageImg = d3.select("#carImage").select("img"),
+	carImageImg = d3.select("#carImageContent").select("img"),
 	adTitleSpan = d3.select("#adTitleText"),
 	keyFactsList = d3.select("#keyFactsList"),
 	priceHistoryList = d3.select("#priceHistoryList");
@@ -279,7 +279,6 @@ function createScattergram() {
         .data(data)
         .enter().append("circle")
         .attr("class", "dot")
-        .attr("r", 1.5)
         .attr("cx", xMap)
         .attr("cy", yMap)
         .attr("clip-path", "url(#clip)")
@@ -314,7 +313,7 @@ function createCarLocationsMap() {
 	});
 	
 	// Initialise the map and give it an image layer provided by OpenStreetMap
-	locationsMap = L.map('locationMap').setView([54.357,-2.215], 5);
+	locationsMap = L.map('locationMapContent').setView([54.357,-2.215], 5);
 	
 	L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 		maxZoom: 19,
@@ -415,7 +414,6 @@ function updateScattergram() {
     var dotEnter = dots.enter();
     dotEnter.append("circle")
         .attr("class", "dot")
-        .attr("r", 1.5)
         .attr("cx", xMap)
         .attr("cy", yMap)
         .on("mouseover", mouseover)
@@ -604,7 +602,7 @@ function calcAdjZoomValues(whichAxis) {
 // Function to create statistics charts
 function createStatsCharts() {
     // Create SVG element inside div
-	var statChartsDiv = d3.select("#makesDonut");
+	var statChartsDiv = d3.select("#makesDonutContent");
 	
 	donutG = statChartsDiv
 		.append("svg")
@@ -766,6 +764,8 @@ function updateStatsCharts() {
 	legendenter.append('rect')
 		.attr('width', leg.rectSize)
 		.attr('height', leg.rectSize)
+		.style("stroke", "rgb(255,255,255)")
+		.style("stroke-width", "1px")
 		.style('fill', function (d) {
 			return colors[d.data.name];
 		});
@@ -773,6 +773,7 @@ function updateStatsCharts() {
 	legendenter.append('text')
 		.attr('x', leg.rectSize + leg.rectSpacing)
 		.attr('y', "8px")
+		.style("fill", "white")
 		.style("font-size", leg.rectTextSize)
 		.text(function (d) { return d.data.name2; });
 }

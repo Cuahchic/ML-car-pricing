@@ -21,45 +21,45 @@
 	<script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
   </head>
   <body>
-    <div id="main">
-	  <div id="titlebit">
-          <span id="titletext">Exploring Car Prices</span>
-	  </div>
-	  <div id="options">
+	  <div id="options" class="row1 col1 width1 height1 raisedbox">
+		  <span class="raisedboxtitle">Controls</span>
 		  <div id="axisSelectorDiv">
 		  </div>
 	  </div>
-	  <div id="clusters">
-        <div id="xSlider"></div>
-        <div id="ySlider"></div>
-        <div id="clustersChart"></div>
+	  <div id="clusters" class="row2 col1 width2 height2 raisedbox">
+		<div id="xSlider"></div>
+		<div id="ySlider"></div>
+		<div id="clustersChart"></div>
 	  </div>
-
-      <div id="statsDetail">
-          <div id="makesDonut"></div>
-          <div id="locationMap"></div>
-          <div id="adTitle">
-		    <span id="adTitleText"></span>
-		  </div>
-		  <div id="carImage">
-		    <img id="carImageImg"/>
-		  </div>
-		  <div id="keyFactsTitle">
-			<span id="keyFactsTitleText">Key Facts</span>
-		  </div>
-		  <div id="keyFacts">
+	  <div id="makesDonut" class="row1 col2 width1 height1 raisedbox">
+		<span class="raisedboxtitle">Manufacturers</span>
+		<div id="makesDonutContent" class="content widthc1 heightc1"></div>
+	  </div>
+	  <div id="carImage" class="row1 col3 width1 height1 raisedbox">
+		<span class="raisedboxtitle">Image</span>
+		<div id="carImageContent" class="content widthc1 heightc1">
+			<img id="carImageImg"/>
+		</div>
+	  </div>
+	  <div id="keyFacts" class="row2 col3 width1 height1 raisedbox">
+		<span class="raisedboxtitle">Key Facts</span>
+		<div id="keyFactsContent" class="content widthc1 heightc1">
 			<ul id="keyFactsList">
 			</ul>
-		  </div>
-		  <div id="priceHistoryTitle">
-			<span id="priceHistoryTitleText">Price History</span>
-		  </div>
-		  <div id="priceHistory">
+		</div>
+	  </div>
+	  <div id="priceHistory" class="row3 col3 width1 height1 raisedbox">
+		<span class="raisedboxtitle">Price History</span>
+		<div id="keyFactsContent" class="content widthc1 heightc1">
 			<ul id="priceHistoryList">
 			</ul>
-		  </div>
-       </div>
-	</div>
-	<script src="{{ url_for('static', filename='carprices.js') }}"></script>
+		</div>
+	  </div>
+	  <div id="locationMap" class="row1 col4 width1 height3 raisedbox">
+		<span class="raisedboxtitle">Map</span>
+		<div id="locationMapContent" class="content widthc1 heightc3">
+		</div>
+	  </div>
+	  <script src="{{ url_for('static', filename='carprices.js') }}"></script>
   </body>
 </html>
