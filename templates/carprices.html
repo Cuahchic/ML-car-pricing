@@ -23,7 +23,17 @@
   <body>
 	  <div id="options" class="row1 col1 width1 height1 raisedbox">
 		  <span class="raisedboxtitle">Controls</span>
-		  <div id="axisSelectorDiv">
+		  <span class="selectorText">Search Name</span>
+		  <div id="searchSelectorDiv" class="selDiv">
+			<select name="chooseSearchName" id="chooseSearchName" class="sel" onchange="getData()"></select>
+		  </div>
+		  <span class="selectorText">x-axis</span>
+		  <div id="xaxisSelectorDiv" class="selDiv">
+			<select name="xaxis" id="xaxisSel" class="sel" onchange="updateScattergram()"></select>
+		  </div>
+		  <span class="selectorText">y-axis</span>
+		  <div id="yaxisSelectorDiv" class="selDiv">
+			<select name="yaxis" id="yaxisSel" class="sel" onchange="updateScattergram()"></select>
 		  </div>
 	  </div>
 	  <div id="clusters" class="row2 col1 width2 height2 raisedbox">

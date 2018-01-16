@@ -73,7 +73,7 @@ def getdata(searchname):
     # List columns we want to use as features (or to create features from) and build up cql query
     colListOther = ['advertid', 'plate', 'bodytype', 'transmission', 'fueltype', 'sellertype', 'make', 'model', 'dealername', 'location', 'searchcriteria', 'distancefromyou', 'features', 'adtitle', 'foundtime']
     colListPlottable = ['year', 'mileage', 'enginesize', 'bhp', 'price', 'averagempg']
-    colListPlottableFriendly = ['Registration Year', 'Mileage (miles)', 'Engine Size (L)', 'Engine Power (BHP)', 'Price (£)', 'Average Fuel Consumption (mpg)']
+    colListPlottableFriendly = ['Registration Year', 'Mileage (miles)', 'Engine Size (L)', 'Engine Power (BHP)', 'Price (£)', 'Avg. Fuel Consumpt. (mpg)']
     cql = 'SELECT ' + ','.join(colListPlottable + colListOther) + ' FROM car_pricing.searchdata WHERE searchname = ? AND advertid = ? LIMIT 1;'
     
     prepStatement = session.prepare(cql)

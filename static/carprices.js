@@ -1,8 +1,8 @@
 
 // Global variables
-var margin = { top: 20, right: 20, bottom: 50, left: 50 },
-    basewidth = 565,
-    baseheight = 565,
+var margin = { top: 20, right: 20, bottom: 80, left: 80 },
+    basewidth = 545,
+    baseheight = 545,
     width = basewidth - margin.left - margin.right,
     height = baseheight - margin.top - margin.bottom,
 	
@@ -130,48 +130,25 @@ $(function () {
 // Query the database to find the unique search names
 function listSearches() {
 	$.getJSON("/api/listsearches", function (json) {
-		var axisSelector = d3.select("#axisSelectorDiv");
+		var placeholderText = "Choose a search";
 		
-		axisSelector
-			.append("span")
-			.text("Choose search name   ")
+		var searchesData = [placeholderText].concat(json["searches"]);
 		
-		var signalSelect = axisSelector
-			.append("select")
-			.attr("id", "chooseSearchName")
-			.on("change", getData);
-
-		var signalOptions = signalSelect
+		var searchSelect = d3.select("#chooseSearchName");
+		
+		var searchOptions = searchSelect
 			.selectAll("option")
-			.data(json["searches"]).enter()
+			.data(searchesData).enter()
 			.append("option")
-			.text(function (d) { return d; });
+			.text(function (d) { return d; })
+			.each(function(d) {
+				if (d === placeholderText) {
+				  d3.select(this).property("disabled", true)
+				}
+			});
 			
-		axisSelector.append("br");
-		
-		axisSelector
-			.append("span")
-			.text("x-axis   ")
-			
-		axisSelector
-			.append("select")
-			.attr("name", "xaxis")
-			.attr("id", "xaxisSel")
-			.on("change", updateScattergram);
-			
-		axisSelector.append("br");
-		
-		axisSelector
-			.append("span")
-			.text("y-axis   ")
-		
-		axisSelector
-			.append("select")
-			.attr("name", "yaxis")
-			.attr("id", "yaxisSel")
-			.on("change", updateScattergram);
-		
-		// Force the on change event to fire and populate the x and y axis boxes
+		// Force update so user doesn't have to do it themselves
+		$('select[id=chooseSearchName] option:eq(1)').attr('selected', 'selected');  // Select first option for search list
 		getData();
 	});
 }
@@ -206,26 +183,42 @@ function getData() {
 function populateXandYSelectors() {
 	var xaxisSel = d3.select("#xaxisSel");
 	
+	var xaxisPlaceholderText = "Choose x axis signal";
+	var yaxisPlaceholderText = "Choose y axis signal";
+	
+	var xaxisData = [{friendly_name: xaxisPlaceholderText, name: ""}].concat(plottableColumns);
+	var yaxisData = [{friendly_name: yaxisPlaceholderText, name: ""}].concat(plottableColumns);
+	
 	xaxisSel
 		.selectAll("option")
-		.data(plottableColumns)
+		.data(xaxisData)
 		.enter()
 		.append("option")
 		.property("value", function(d) { return d.name; })
-		.text(function (d) { return d.friendly_name; });
+		.text(function (d) { return d.friendly_name; })
+		.each(function(d) {
+				if (d.friendly_name === xaxisPlaceholderText) {
+				  d3.select(this).property("disabled", true)
+				}
+		});
 	
 	var yaxisSel = d3.select("#yaxisSel");
 	
 	yaxisSel
 		.selectAll("option")
-		.data(plottableColumns)
+		.data(yaxisData)
 		.enter()
 		.append("option")
 		.property("value", function(d) { return d.name; })
-		.text(function (d) { return d.friendly_name; });
+		.text(function (d) { return d.friendly_name; })
+		.each(function(d) {
+				if (d.friendly_name === yaxisPlaceholderText) {
+				  d3.select(this).property("disabled", true)
+				}
+		});
 		
-	$('select[id=xaxisSel] option:eq(0)').attr('selected', 'selected');  // Select first option for x axis
-	$('select[id=yaxisSel] option:eq(1)').attr('selected', 'selected');  // Select second option for y axis
+	$('select[id=xaxisSel] option:eq(1)').attr('selected', 'selected');  // Select first option for x axis
+	$('select[id=yaxisSel] option:eq(2)').attr('selected', 'selected');  // Select second option for y axis
 }
 
 
@@ -236,6 +229,7 @@ function createScattergram() {
 
     // Add svg elements to div
     svg = clustersDiv.append("svg")
+		.attr("id", "svgChartClusters")
         .attr("width", basewidth)
         .attr("height", baseheight)
         .append("g")
