@@ -21,6 +21,7 @@ import sys
 from urllib.parse import urlparse, parse_qs
 from cassandra.cluster import Cluster
 import traceback
+import copy
 
 
 # Create a class that we can use to track everything we want to save from each advert
@@ -57,120 +58,96 @@ class advert:
 
 # Create a class to store our search criteria so we can pass it around
 class searchCriteria:
-    def __init__(self):
+    def __init__(self, name, params):
         # Set up all the search parameters, note that many of these are case sensitive
-        self.searchName = 'Local automatics'
-        self.milesFrom = 100    # Set to 1500 to see national, can be set to any number (e.g. 157)
-        self.postCode = 'fk27ga'  # No spaces
-        self.carTypes = ['Nearly%20New']  # If multiple are specified here then add each with it's own API parameter. Can choose from New, Used or Nearly New
-        self.make = ''
-        self.model = ''
-        self.modelVariant = ''
-        self.priceFrom = 15000
-        self.priceTo = 40000
-        self.yearFrom = 2016
-        self.yearTo = 1970
-        self.mileageFrom = 0
-        self.mileageTo = 5000
-        self.bodyTypes = ['Saloon', 'Estate', 'Coupe', 'Convertible']
-        self.fuelType = ''
-        self.engineSizeFrom = 0.0
-        self.engineSizeTo = 0.0
-        self.transmission = 'Automatic'
-        self.keywords = ''        # Any spaces need replaced by %20
-        self.searchURL = self.urlBuilder()
-        
-    def export(self):   # Creates dictionary for passing to Cassandra map, all values MUST BE TEXT
-        e = {}
-        
-        e['Search Name'] = self.searchName
-        e['Miles From'] = str(self.milesFrom)
-        e['Postcode'] = self.postCode
-        e['Car Types'] = ','.join(self.carTypes).replace('%20', ' ')
-        
-        if (self.make != ''):
-            e['Make'] = self.make
-        
-        if (self.model != ''):
-            e['Model'] = self.model
-        
-        if (self.modelVariant != ''):
-            e['Model Variant'] = self.modelVariant
-        
-        if (self.priceFrom != Decimal(0)):
-            e['Price From'] = str(self.priceFrom)
-            
-        if (self.priceTo != Decimal(0)):
-            e['Price To'] = str(self.priceTo)
-            
-        if (self.yearFrom != 1970):
-            e['Year From'] = str(self.yearFrom)
-            
-        if (self.yearTo != 1970):
-            e['Year To'] = str(self.yearTo)
-        
-        if (self.mileageFrom != 0):
-            e['Mileage From'] = str(self.mileageFrom)
-        
-        if (self.mileageTo != 0):
-            e['Mileage To'] = str(self.mileageTo)
-               
-        if type(self.bodyTypes) is list and len(self.bodyTypes) > 0:
-            e['Body Types'] = ','.join(self.bodyTypes)
-        elif type(self.bodyTypes) is str and len(self.bodyTypes) > 0:
-            e['Body Types'] = self.bodyTypes
-        
-        if (self.fuelType != ''):
-            e['Fuel Type'] = self.fuelType
-            
-        if (self.engineSizeFrom != 0.0):
-            e['Engine Size From'] = str(self.engineSizeFrom)
-            
-        if (self.engineSizeTo != 0.0):
-            e['Engine Size To'] = str(self.engineSizeTo)
-            
-        if (self.transmission != ''):
-            e['Transmission'] = self.transmission
-            
-        if (self.keywords != ''):
-            e['Keywords'] = self.keywords
-            
-        e['Search URL'] = self.searchURL
-        
-        return e
+        self.searchName = name
+        self.params = params
+        self.translations = {'Miles From': 'radius',
+                             'Postcode': 'postcode',
+                             'Car Types': 'onesearchad',
+                             'Make': 'make',
+                             'Model': 'model',
+                             'Price From': 'price-from',
+                             'Price To': 'price-to',
+                             'Year From': 'year-from',
+                             'Year To': 'year-to',
+                             'Mileage From': 'minimum-mileage',
+                             'Mileage To': 'maximum-mileage',
+                             'Body Types': 'body-type',
+                             'Fuel Type': 'fuel-type',
+                             'Engine Size From': 'minimum-badge-engine-size',
+                             'Engine Size To': 'maximum-badge-engine-size',
+                             'Transmission': 'transmission',
+                             'Keywords': 'keywords'}   
+        self.searchURL = urlBuilder(self.params, self.translations)
+        self.refinedURLs = urlRefiner(self.searchURL, self.params, self.translations)
     
     
-    # Takes the search criteria selected by the user and builds the Autotrader URL to scrape
-    def urlBuilder(self):
-        outputURL = 'https://www.autotrader.co.uk/car-search?sort=price-asc'   # Always sort ascending order in price
-        
-        outputURL = outputURL + '&radius=' + str(self.milesFrom)
-        outputURL = outputURL + '&postcode=' + self.postCode
-        for carType in self.carTypes:
-            outputURL = outputURL + '&onesearchad=' + carType
-        outputURL = outputURL + ('' if (self.make == '') else ('&make=' + self.make))       # If expression (true_output if boolean_condition else false_output)
-        outputURL = outputURL + ('' if (self.model == '') else ('&model=' + self.model))
-        outputURL = outputURL + ('' if (self.modelVariant == '') else ('&aggregatedtrim=' + self.modelVariant))
-        outputURL = outputURL + ('' if (self.priceFrom == Decimal(0)) else ('&price-from=' + str(self.priceFrom)))
-        outputURL = outputURL + ('' if (self.priceTo == Decimal(0)) else ('&price-to=' + str(self.priceTo)))
-        outputURL = outputURL + ('' if (self.yearFrom == 1970) else ('&year-from=' + str(self.yearFrom)))
-        outputURL = outputURL + ('' if (self.yearTo == 1970) else ('&year-to=' + str(self.yearTo)))
-        outputURL = outputURL + ('' if (self.mileageFrom == 0) else ('&minimum-mileage=' + str(self.mileageFrom)))
-        outputURL = outputURL + ('' if (self.mileageTo == 0) else ('&maximum-mileage=' + str(self.mileageTo)))
-        
-        if type(self.bodyTypes) is list and len(self.bodyTypes) > 0:
-            for bodyType in self.bodyTypes:
-                outputURL = outputURL + '&body-type=' + bodyType
-        elif type(self.bodyTypes) is str and len(self.bodyTypes) > 0:
-            outputURL = outputURL + '&body-type=' + self.bodyTypes
-        
-        outputURL = outputURL + ('' if (self.fuelType == '') else ('&fuel-type=' + self.fuelType))
-        outputURL = outputURL + ('' if (self.engineSizeFrom == 0.0) else ('&minimum-badge-engine-size=' + str(self.engineSizeFrom)))
-        outputURL = outputURL + ('' if (self.engineSizeTo == 0.0) else ('&maximum-badge-engine-size=' + str(self.engineSizeTo)))
-        outputURL = outputURL + ('' if (self.transmission == '') else ('&transmission=' + self.transmission))
-        outputURL = outputURL + ('' if (self.keywords == '') else ('&keywords=' + self.keywords))
+# Takes the search criteria selected by the user and builds the Autotrader URL to scrape
+def urlBuilder(params, translations):
+    outputURL = 'https://www.autotrader.co.uk/car-search?sort=price-asc'   # Always sort ascending order in price
     
-        return outputURL
+    for p in params.keys():
+        APIparam = translations[p]
+        APIparam = '&' + APIparam + '='
+        val = params[p]
+        vals = val.split(',')
+        
+        for v in vals:
+            outputURL = outputURL + APIparam + v
+
+    return outputURL
+
+
+# Takes the URL created and splits it down so that all the results are able to be displayed, Autotrader limits you to about 100 pages of results
+def urlRefiner(startSearchURL, params, translations):
+    refinedURLs = []
+    
+    # Start with the basic URL, this might work
+    currentParams = copy.deepcopy(params)   # By default dictionaries are only copied as pointers so the original is modified
+    pagesLimit = 95
+    splitSize = 2
+    userAgent = pickAgent()
+    
+    # Get response based on initial URL
+    response = requests.get(startSearchURL, headers = {'User-Agent': userAgent})
+
+    # Create soup
+    soup = BeautifulSoup(response.text, 'html.parser')
+    
+    # Adjust max pages and list of makes if this is the first run
+    maxPages = findMaxPages(soup)
+    
+    if maxPages <= pagesLimit:
+        refinedURLs.append(startSearchURL)
+    else:
+        if currentParams['Price From'] == None: # If no price from is specified then use the lowest in the drop down on the page
+            sel = soup.find('select', attrs = {'name': 'price-from'})
+            opt = sel.findAll('option')
+            minPriceFrom = min([int(o['value']) for o in opt if o['value'] != ''])
+        else:
+            minPriceFrom = int(currentParams['Price From'])
+        
+        if currentParams['Price To'] == None: # If no price from is specified then use the highest in the drop down on the page
+            sel = soup.find('select', attrs = {'name': 'price-to'})
+            opt = sel.findAll('option')
+            maxPriceFrom = max([int(o['value']) for o in opt if o['value'] != ''])
+        else:
+            maxPriceFrom = int(currentParams['Price To'])
+            
+        step = (maxPriceFrom - minPriceFrom) / splitSize
+        
+        for i in range(0, splitSize):
+            currentParams['Price From'] = str(int(minPriceFrom + (step * i)) + (1 if i > 0 else 0))
+            currentParams['Price To'] = str(int(minPriceFrom + (step * (i + 1))))
+            
+            ri = random.randint(2, 6)
+            print('Figuring out the refined URLs, going for a ' + str(ri) + ' seconds sleep.')
+            time.sleep(ri)
+            
+            refinedURLs = refinedURLs + urlRefiner(urlBuilder(currentParams, translations), currentParams, translations)
+            
+    return refinedURLs                
 
 
 # This class stores all the metadata we need for running the program
@@ -452,9 +429,9 @@ def buildOutputs(md, sc, ad):
         columnList.append('searchname')
         valuesList.append(sc.searchName)
         
-    if sc.export() != {}:
+    if sc.params != {}:
         columnList.append('searchcriteria')
-        valuesList.append(sc.export())
+        valuesList.append(sc.params)
         
     if md.sessionCreatedTime != datetime.datetime(year = 1970, month = 1, day = 1):
         columnList.append('sessioncreatedtime')
@@ -615,6 +592,29 @@ def writeLog(log):
     cluster.shutdown()
 
 
+# This function gets the search criterias from the database and creates the search objects from them
+def initialiseSearchCriterias():
+    scs = []
+    sc = None
+    
+    cluster = Cluster()                         # Connect to local host on default port 9042
+    session = cluster.connect('car_pricing')    # Connect to car_pricing keyspace
+    cql = 'SELECT searchname, searchcriteria FROM car_pricing.searchqueries;'    
+    prepStatement = session.prepare(cql)        # Prepared statement only needs sent to server once and be executed multiple times as below, better for performance
+        
+    queryResults = session.execute(prepStatement)
+    
+    for qr in queryResults:
+        sc = searchCriteria(qr[0], qr[1])
+        
+        scs.append(sc)
+        
+    session.shutdown()
+    cluster.shutdown()
+    
+    return scs
+
+
 # The main code block we want to run
 def main():    
     # Create a log object so we can log all the events and write them to the database
@@ -625,49 +625,67 @@ def main():
         # Create a metadata object to use
         md = metadata()
         
-        # Instantise the search criteria object
-        sc = searchCriteria()
+        # Instantise the search criteria objects
+        scs = initialiseSearchCriterias()
         
-        # Initialise empty results list, this is the main output
-        masterResultsList = []
+        # Write to log
+        msg = 'Found ' + str(len(scs)) + ' searches in database.'
+        log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
+        print(msg)
         
-        # Loop through all the pages and add the results to a list
-        pgNum = 1
-        makesRegex = ''
-        while masterResultsList == [] or pgNum <= md.maxPages:  # On the first run pgNum = 1 and md.maxPages = 1 but since the master list is empty this will still run first time
-            # Make a random delay to confuse any bot detection algorithms 
-            msg = 'Search results page: ' + str(pgNum) + ' of ' + ('unknown' if (masterResultsList == []) else (str(md.maxPages))) + '.'
-            if pgNum > 1:
-                ri = random.randint(4, 12)
-                msg = msg + ' Going for a ' + str(ri) + ' seconds sleep.'
-                time.sleep(ri)
+        # Iterate through each search and get the results
+        for sc in scs:
+            # Write to log
+            msg = 'Starting search = ' + sc.searchName + '.'
             log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
             print(msg)
             
-            # Append the page number onto the URL to get subsequent pages
-            currentSearchURL = sc.searchURL + '&page=' + str(pgNum)
-        
-            # Now run load webpage
-            response = requests.get(currentSearchURL, headers = {'User-Agent': md.user_agent})
-        
-            # Create soup
-            soup = BeautifulSoup(response.text, 'html.parser')
+            for j in range(0, len(sc.refinedURLs)):
+                # Write to log
+                msg = 'On refined URL ' + str(j + 1) + ' of ' + str(len(sc.refinedURLs)) + '.'
+                log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
+                print(msg)
+                
+                # Initialise empty results list, this is the main output
+                masterResultsList = []
+                
+                # Loop through all the pages and add the results to a list
+                pgNum = 1
+                makesRegex = ''
+                while masterResultsList == [] or pgNum <= md.maxPages:  # On the first run pgNum = 1 and md.maxPages = 1 but since the master list is empty this will still run first time
+                    # Make a random delay to confuse any bot detection algorithms 
+                    msg = 'Search results page: ' + str(pgNum) + ' of ' + ('unknown' if (masterResultsList == []) else (str(md.maxPages))) + '.'
+                    if pgNum > 1:
+                        ri = random.randint(4, 12)
+                        msg = msg + ' Going for a ' + str(ri) + ' seconds sleep.'
+                        time.sleep(ri)
+                    log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
+                    print(msg)
+                    
+                    # Append the page number onto the URL to get subsequent pages
+                    currentSearchURL = sc.refinedURLs[j] + '&page=' + str(pgNum)
+                
+                    # Now run load webpage
+                    response = requests.get(currentSearchURL, headers = {'User-Agent': md.user_agent})
+                
+                    # Create soup
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    
+                    # Adjust max pages and list of makes if this is the first run
+                    if masterResultsList == []:
+                        md.maxPages = findMaxPages(soup)
+                        makesRegex = buildMakesRegex(soup)
+                    
+                    # Parse first page
+                    resultsList = parsePage(soup, md, makesRegex, log)
             
-            # Adjust max pages and list of makes if this is the first run
-            if masterResultsList == []:
-                md.maxPages = findMaxPages(soup)
-                makesRegex = buildMakesRegex(soup)
-            
-            # Parse first page
-            resultsList = parsePage(soup, md, makesRegex, log)
-    
-            # Concatenate lists together
-            masterResultsList = masterResultsList + resultsList
-            
-            pgNum += 1
-        
-        msg = writeResults(md, sc, masterResultsList)
-        log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
+                    # Concatenate lists together
+                    masterResultsList = masterResultsList + resultsList
+                    
+                    pgNum += 1
+                
+                msg = writeResults(md, sc, masterResultsList)
+                log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
         
         
     except Exception as e:

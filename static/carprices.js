@@ -18,6 +18,7 @@ var margin = { top: 20, right: 20, bottom: 80, left: 80 },
 	selectedSearchNameEncoded,
 	keyFacts = [],
 	priceHistory = [],
+	firstRun = 1,
 	
     xaxis_class,
     yaxis_class,
@@ -172,9 +173,16 @@ function getData() {
 		});
 		
 		populateXandYSelectors();
-		createScattergram();
-		createStatsCharts();
-		createCarLocationsMap();
+		if (firstRun == 1) {
+			createScattergram();
+			createStatsCharts();
+			createCarLocationsMap();
+			firstRun = 0;
+		} else {
+			colors = {};
+			updateScattergram();
+			updateStatsCharts();
+		}
 	});
 }
 
@@ -699,11 +707,11 @@ function updateStatsCharts() {
 				this._previous = d;
 			}
 		})
+		.attr("class", "dpath")
+		.merge(path)
 		.attr("fill", function (d, i) {
 			return colors[d.data.name];
 		})
-		.attr("class", "dpath")
-		.merge(path)
 		.transition()
 		.duration(myDuration)
 		.attrTween("d", arcTween);
