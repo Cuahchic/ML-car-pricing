@@ -46,7 +46,7 @@ def listsearches():
     session.shutdown()
     cluster.shutdown()
     
-    response = jsonify({"searches": list(searches)})
+    response = jsonify({"searches": sorted(list(searches))})
     
     return response
 
