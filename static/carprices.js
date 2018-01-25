@@ -182,6 +182,7 @@ function getData() {
 			colors = {};
 			updateScattergram();
 			updateStatsCharts();
+			plotHomeMarker();
 		}
 	});
 }
@@ -315,7 +316,7 @@ function createCarLocationsMap() {
 	});
 	
 	// Initialise the map and give it an image layer provided by OpenStreetMap
-	locationsMap = L.map('locationMapContent').setView([54.357,-2.215], 5);
+	locationsMap = L.map('locationMapContent').setView([54.357,-2.215], 6);
 	
 	L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 		maxZoom: 19,
@@ -324,6 +325,19 @@ function createCarLocationsMap() {
 	
 	// Initialise geocoder
 	geocoder = new L.Control.Geocoder.Nominatim();
+	
+	plotHomeMarker();
+}
+
+
+// Function to reset the home marker
+function plotHomeMarker() {
+	// Remove any lingering markers
+	if ("home" in mapMarkers) {
+		locationsMap.removeLayer(mapMarkers["home"]);
+		
+		delete mapMarkers["home"];
+	}
 	
 	// Get the users home location coordinates using geolookup, see https://stackoverflow.com/questions/30934341/leaflet-geosearch-get-lon-lat-from-address
 	var postCode = data[0].searchcriteria.Postcode;
@@ -338,7 +352,7 @@ function createCarLocationsMap() {
 		homeMarker.bindPopup("Home").openPopup();
 		
 		mapMarkers["home"] = homeMarker;
-	});
+	});	
 }
 
 

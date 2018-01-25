@@ -8,7 +8,7 @@ This is used to scrape car results from Autotrader and analyse them using ML
 """
 # Required libraries
 from bs4 import BeautifulSoup
-import csv
+from fake_useragent import UserAgent
 import random
 import datetime
 import requests
@@ -22,38 +22,21 @@ from urllib.parse import urlparse, parse_qs
 from cassandra.cluster import Cluster
 import traceback
 import copy
+import pandas as pd
 
 
 # Create a class that we can use to track everything we want to save from each advert
 class advert:
     def __init__(self):
-        self.adTitle = ''
-        self.adID = ''
-        self.attentionGrab = ''
-        self.foundTime = datetime.datetime(year = 1970, month = 1, day = 1)
-        self.year = 1970
-        self.plate = -1
-        self.bodyType = ''
-        self.mileage = 0
-        self.transmission = ''
-        self.engineSize = 0
-        self.bhp = 0
-        self.fuelType = ''
-        self.price = Decimal(0)
-        self.sellerType = ''
-        self.distanceFromYou = 0
-        self.location = ''
-        self.make = ''
-        self.model = ''
-        self.modelfull = ''
-        self.dealerName = ''
-        self.features = ''
-        self.urbanMPG = 0
-        self.extraUrbanMPG = 0
-        self.averageMPG = 0
-        self.annualTax = Decimal(0)
-        self.advertHTML = ''
-        self.thumbnail = None
+        self.features = {}
+        self.colList = ['year', 'plate', 'bodytype', 'mileage', 'enginesize', 'bhp', 'fueltype', 'sellertype', 'make', 'model', 'averagempg']
+    
+    def dataFrame(self):
+        d = {}
+        for c in self.colList:
+            d[c] = self.features[c]
+        
+        return pd.DataFrame([d])
 
 
 # Create a class to store our search criteria so we can pass it around
@@ -107,10 +90,10 @@ def urlRefiner(startSearchURL, params, translations):
     currentParams = copy.deepcopy(params)   # By default dictionaries are only copied as pointers so the original is modified
     pagesLimit = 95
     splitSize = 2
-    userAgent = pickAgent()
+    ua = UserAgent()
     
     # Get response based on initial URL
-    response = requests.get(startSearchURL, headers = {'User-Agent': userAgent})
+    response = requests.get(startSearchURL, headers = {'User-Agent': ua.random})
 
     # Create soup
     soup = BeautifulSoup(response.text, 'html.parser')
@@ -154,7 +137,7 @@ def urlRefiner(startSearchURL, params, translations):
 class metadata:
     def __init__(self):
         self.sessionCreatedTime = datetime.datetime.now()
-        self.user_agent = pickAgent()
+        self.user_agent = None #pickAgent()
         self.maxPages = 1   # Starts at 1 then is updated later using while loop
         
         pythVersionRegex = re.compile(r'[^|]*')
@@ -164,7 +147,7 @@ class metadata:
         self.codeVersion = '1.0.0'
         self.hostName = socket.gethostname()
 
-
+"""
 # Randomly choose one of the previously defined user agents
 def pickAgent():
     # Open file with lots of user agents to choose from, so we can confuse any bot detection algorithms
@@ -172,7 +155,7 @@ def pickAgent():
         reader = csv.reader(f)
         user_agents = list(reader)      # Returns this as a list of lists (if the CSV had multiple columns these would be in sublist)
     
-    return random.choice(user_agents)[0]
+    return random.choice(user_agents)[0]"""
 
 
 # Find the maximum number of pages from a search result page
@@ -192,7 +175,7 @@ def findMaxPages(soup):
 
 
 # Take a single results page and scrape it for the relevant information we want to get back, returns a list of objects
-def parsePage(soup, md, makesRegex, log):
+def parsePage(soup, md, ua, makesRegex, log):
     resultsListToReturn = []
     
     pageResults = soup.findAll('li', attrs = {'class': 'search-page__result'})
@@ -201,25 +184,29 @@ def parsePage(soup, md, makesRegex, log):
         if pageResults[j].find('span', attrs = {'class': 'listings-standout'}) == None: # Adverts with this span class are adverts and should not be included in our results
             # Make a random delay to confuse any bot detection algorithms now that we are loading sub pages from here
             msg = 'Advert: ' + str(j + 1) + ' of ' + str(len(pageResults)) + '.'
-            if j > 0:
-                ri = random.randint(1, 3)
-                msg = msg + ' Having a wee ' + str(ri) + ' seconds rest while I load the advert page.'
-                time.sleep(ri)
             log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
             print(msg)
+            if j > 0:
+                ri = random.randint(6, 12)
+                msg = 'Having a wee ' + str(ri) + ' seconds rest while I load the advert page.'
+                log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
+                print(msg)
+                time.sleep(ri)
+            
+            
             
             # Create advert object to store findings
             ad = advert()
             
-            ad.advertHTML = str(pageResults[j])
-            ad.foundTime = datetime.datetime.now()
+            ad.features['adverthtml'] = str(pageResults[j])
+            ad.features['foundtime'] = datetime.datetime.now()
             
             contentCol = pageResults[j].find('section', attrs = {'class': 'content-column'})
             priceCol = pageResults[j].find('section', attrs = {'class': 'price-column'})
             
-            ad.adID = pageResults[j].get('id')
-            ad.adTitle = contentCol.find('h2', attrs = {'class': 'listing-title title-wrap'}).text.strip()
-            ad.attentionGrab = contentCol.find('p', attrs = {'class': 'listing-attention-grabber'}).text.strip()
+            ad.features['advertid']= pageResults[j].get('id')
+            ad.features['adtitle'] = contentCol.find('h2', attrs = {'class': 'listing-title title-wrap'}).text.strip()
+            ad.features['attentiongrab'] = contentCol.find('p', attrs = {'class': 'listing-attention-grabber'}).text.strip()
             
             # Get unnamed list of attributes
             liTags = contentCol.find('ul', attrs = {'class': 'listing-key-specs'}).findAll('li')
@@ -236,48 +223,45 @@ def parsePage(soup, md, makesRegex, log):
             
             for li in liTags:                   
                 if rBodyTypes.search(li.text.lower()) != None:
-                    ad.bodyType = li.text
+                    ad.features['bodytype'] = li.text
                 elif rMileage.search(li.text.lower()) != None:
-                    ad.mileage = int(li.text.replace(' miles', '').replace(',', ''))
+                    ad.features['mileage'] = int(li.text.replace(' miles', '').replace(',', ''))
                 elif rTransmission.search(li.text.lower()) != None:
-                    ad.transmission = li.text
+                    ad.features['transmission'] = li.text
                 elif rEngineSizeLitres.search(li.text.lower()) != None:
-                    ad.engineSize = float(li.text.replace('L', ''))
+                    ad.features['enginesize'] = float(li.text.replace('L', ''))
                 elif rHorsepowerBHP.search(li.text.lower()) != None:
-                    ad.bhp = int(li.text.replace(' bhp', ''))
+                    ad.features['bhp'] = int(li.text.replace(' bhp', ''))
                 elif rFuelType.search(li.text.lower()) != None:
-                    ad.fuelType = li.text
+                    ad.features['fueltype'] = li.text
                 elif rYear.search(li.text.lower()) != None:
                     rYearMatches = rYear.match(li.text.lower())
                     
                     if int(rYearMatches.groups()[0]) > 1980:    # Have a sensible cutoff for year to prevent mismatching
-                        ad.year = int(rYearMatches.groups()[0])
+                        ad.features['year'] = int(rYearMatches.groups()[0])
                         
                         fullPlate = rYearMatches.groups()[1]    # This is the group that says ' (66 reg)' for example, we need to extract the number
-                        if fullPlate == None:
-                            ad.plate = -1
-                        else:
-                            rPlateMatches = rPlate.search(fullPlate)
-                            
-                            ad.plate = int(rPlateMatches[0])
+                        if fullPlate != None:
+                            rPlateMatches = rPlate.search(fullPlate)                            
+                            ad.features['plate'] = int(rPlateMatches[0])
             
             # Get car price information
             currencyString = priceCol.find('div', attrs = {'class': 'vehicle-price'}).text
-            ad.price = Decimal(sub(r'[^\d.]', '', currencyString))
+            ad.features['price'] = Decimal(sub(r'[^\d.]', '', currencyString))
             
             # Determine if trade or private seller
             sellerType = contentCol.find('div', attrs = {'class': 'seller-type'}).text.lower()
             rSellerType = re.compile(r'(trade|private)')
-            ad.sellerType = rSellerType.search(sellerType)[0]
+            ad.features['sellertype'] = rSellerType.search(sellerType)[0]
             
             # Get distance from specified postcode
             sellerLocation = contentCol.find('div', attrs = {'class': 'seller-location'})
             rSellerLocation = re.compile(r'\d+')
-            ad.distanceFromYou = int(rSellerLocation.search(sellerLocation.text)[0])
+            ad.features['distancefromyou'] = int(rSellerLocation.search(sellerLocation.text)[0])
             
             # Get seller town using same bs4 tag as distance above (note that .span finds the first span tag within the parent element, and is shorthand for using .find when there is only one element of that type)
             if sellerLocation.span != None:
-                ad.location = sellerLocation.span.text           
+                ad.features['location'] = sellerLocation.span.text           
             
             # Get the thumbnail image of the car
             fig = contentCol.find('figure', attrs = {'class': 'listing-main-image'})
@@ -299,11 +283,11 @@ def parsePage(soup, md, makesRegex, log):
                 if imgReq.status_code == 200:
                     thumbnail = imgReq.content
                 
-                ad.thumbnail = thumbnail
+                ad.features['thumbnail'] = thumbnail
             
             # Get the further detail from the actual advert page
             # NOTE: Python considers user defined classes mutable so ad is actually updated by this function call
-            pageLevelInfo(md, ad, makesRegex)
+            pageLevelInfo(md, ua, ad, makesRegex)
             
             # Add the advert to the overall list to be returned
             resultsListToReturn.append(ad)
@@ -313,12 +297,12 @@ def parsePage(soup, md, makesRegex, log):
 
 # This function takes an advert ID and loads the page so we can scrape more information
 # NOTE: Python considers user defined classes mutable (changeable) so passes a pointer to the class. This means functions can update the object within the parent.
-def pageLevelInfo(md, ad, makesRegex):
+def pageLevelInfo(md, ua, ad, makesRegex):
     # Build up URL to load page
     baseURL = 'https://www.autotrader.co.uk/classified/advert/'
-    advertURL = baseURL + ad.adID
+    advertURL = baseURL + ad.features['advertid']
     
-    response = requests.get(advertURL, headers = {'User-Agent': md.user_agent})
+    response = requests.get(advertURL, headers = {'User-Agent': ua.random})
     
     soup = BeautifulSoup(response.text, 'html.parser')
     
@@ -340,7 +324,7 @@ def pageLevelInfo(md, ad, makesRegex):
                 rMPGMatches = rMPG.match(desc)
                 
                 if rMPGMatches != None:
-                    ad.urbanMPG = float(rMPGMatches[0])
+                    ad.features['urbanmpg'] = float(rMPGMatches[0])
                 
             elif divTerm.text.lower() == 'extra urban mpg':
                 desc = fpaSection.find('div', attrs = {'class': 'fpaSpecifications__description'}).text
@@ -348,7 +332,7 @@ def pageLevelInfo(md, ad, makesRegex):
                 rMPGMatches = rMPG.match(desc)
                 
                 if rMPGMatches != None:
-                    ad.extraUrbanMPG = float(rMPGMatches[0])
+                    ad.features['extraurbanmpg'] = float(rMPGMatches[0])
                 
             elif divTerm.text.lower() == 'average mpg':
                 desc = fpaSection.find('div', attrs = {'class': 'fpaSpecifications__description'}).text
@@ -356,7 +340,7 @@ def pageLevelInfo(md, ad, makesRegex):
                 rMPGMatches = rMPG.match(desc)
                 
                 if rMPGMatches != None:
-                    ad.averageMPG = float(rMPGMatches[0])
+                    ad.features['averagempg'] = float(rMPGMatches[0])
                 
             elif divTerm.text.lower() == 'annual tax':
                 desc = fpaSection.find('div', attrs = {'class': 'fpaSpecifications__description'}).text
@@ -364,7 +348,7 @@ def pageLevelInfo(md, ad, makesRegex):
                 rTaxMatches = rTax.match(desc)
                 
                 if rTaxMatches != None:
-                    ad.annualTax = float(rTaxMatches.groups()[0])
+                    ad.features['annualtax'] = float(rTaxMatches.groups()[0])
     
     # Get the big comma separated list of deatures we can use with one-hot encoding later to predict the car price
     combinedFeatures = soup.find('section', attrs = {'class': 'combinedFeatures'})
@@ -372,31 +356,32 @@ def pageLevelInfo(md, ad, makesRegex):
     if combinedFeatures != None:
         featuresHeading = soup.find('h2', attrs = {'class': 'combinedFeatures__heading'}).text
         features = combinedFeatures.text
-        ad.features = features.replace(featuresHeading, '').replace('\n', '')
+        ad.features['features'] = features.replace(featuresHeading, '').replace('\n', '')
     
     # Get the dealer name
     divDealer = soup.find('div', attrs = {'class': 'aboutDealer__name'})
     
     if divDealer != None:
-        ad.dealerName = divDealer.text.replace('\n', '').strip()
+        ad.features['dealername'] = divDealer.text.replace('\n', '').strip()
     
     # Find the make and extended model name
     rMakes = re.compile(makesRegex)
     
-    ad.make = rMakes.match(ad.adTitle.lower())[0]
-    ad.modelfull = ad.adTitle.lower().replace(ad.make, '').strip()
+    ad.features['make'] = rMakes.match(ad.features['adtitle'].lower())[0]
+    ad.features['modelfull'] = ad.features['adtitle'].lower().replace(ad.features['make'], '').strip()
     
-    if ad.engineSize > 0:
-        rModelShort = re.compile('^(.*?)' + str(ad.engineSize).replace('.', '\.'))  # Try looking for exact engine size in name
-        rModelShort2 = re.compile('^(.*?)\d\.\d')                                    # Some cars say 2.1L but are actually 2.2L or whatever, so try generic engine size
-        
-        rModelMatches = rModelShort.match(ad.modelfull)
-        
-        if rModelMatches == None:
-            rModelMatches = rModelShort2.match(ad.modelfull)
-        
-        if rModelMatches != None:
-            ad.model = rModelMatches.groups()[0].strip()
+    if 'enginesize' in ad.features:     # An electric car doesn't have an engine size
+        if ad.features['enginesize'] > 0:
+            rModelShort = re.compile('^(.*?)' + str(ad.features['enginesize']).replace('.', '\.'))  # Try looking for exact engine size in name
+            rModelShort2 = re.compile('^(.*?)\d\.\d')                                    # Some cars say 2.1L but are actually 2.2L or whatever, so try generic engine size
+            
+            rModelMatches = rModelShort.match(ad.features['modelfull'])
+            
+            if rModelMatches == None:
+                rModelMatches = rModelShort2.match(ad.features['modelfull'])
+            
+            if rModelMatches != None:
+                ad.features['model'] = rModelMatches.groups()[0].strip()
             
     
 # This function gets all the possible manufacturers from the options on the side
@@ -416,15 +401,7 @@ def buildMakesRegex(soup):
 def buildOutputs(md, sc, ad):
     columnList = []
     valuesList = []
-
-    if ad.adID != '':
-        columnList.append('advertid')
-        valuesList.append(ad.adID)
-        
-    if ad.foundTime != datetime.datetime(year = 1970, month = 1, day = 1):
-        columnList.append('foundtime')
-        valuesList.append(ad.foundTime)
-        
+       
     if sc.searchName != '':
         columnList.append('searchname')
         valuesList.append(sc.searchName)
@@ -448,106 +425,10 @@ def buildOutputs(md, sc, ad):
     if md.codeVersion != '':
         columnList.append('codeversion')
         valuesList.append(md.codeVersion)
-        
-    if ad.adTitle != '':
-        columnList.append('adtitle')
-        valuesList.append(ad.adTitle)
     
-    if ad.attentionGrab != '':
-        columnList.append('attentiongrab')
-        valuesList.append(ad.attentionGrab)
-        
-    if ad.year != 1970:
-        columnList.append('year')
-        valuesList.append(ad.year)
-        
-    if ad.plate != -1:
-        columnList.append('plate')
-        valuesList.append(ad.plate)
-        
-    if ad.bodyType != '':
-        columnList.append('bodyType')
-        valuesList.append(ad.bodyType)
-        
-    if ad.mileage != '':
-        columnList.append('mileage')
-        valuesList.append(ad.mileage)
-        
-    if ad.transmission != '':
-        columnList.append('transmission')
-        valuesList.append(ad.transmission)
-        
-    if ad.engineSize != 0:
-        columnList.append('enginesize')
-        valuesList.append(ad.engineSize)
-        
-    if ad.bhp != 0:
-        columnList.append('bhp')
-        valuesList.append(ad.bhp)
-        
-    if ad.fuelType != '':
-        columnList.append('fueltype')
-        valuesList.append(ad.fuelType)
-        
-    if ad.price != Decimal(0):
-        columnList.append('price')
-        valuesList.append(ad.price)
-     
-    if ad.sellerType != '':
-        columnList.append('sellertype')
-        valuesList.append(ad.sellerType)
-        
-    if ad.distanceFromYou != 0:
-        columnList.append('distancefromyou')
-        valuesList.append(ad.distanceFromYou)
-        
-    if ad.location != '':
-        columnList.append('location')
-        valuesList.append(ad.location)
-        
-    if ad.make != '':
-        columnList.append('make')
-        valuesList.append(ad.make)
-        
-    if ad.model != '':
-        columnList.append('model')
-        valuesList.append(ad.model)
-        
-    if ad.modelfull != '':
-        columnList.append('modelfull')
-        valuesList.append(ad.modelfull)
-    
-    if ad.dealerName != '':
-        columnList.append('dealername')
-        valuesList.append(ad.dealerName)
-        
-    if ad.features != '':
-        columnList.append('features')
-        valuesList.append(ad.features)
-        
-    if ad.urbanMPG != 0:
-        columnList.append('urbanmpg')
-        valuesList.append(ad.urbanMPG)
-        
-    if ad.extraUrbanMPG != 0:
-        columnList.append('extraurbanmpg')
-        valuesList.append(ad.extraUrbanMPG)
-
-    if ad.averageMPG != 0:
-        columnList.append('averagempg')
-        valuesList.append(ad.averageMPG)
-
-    if ad.annualTax != Decimal(0):
-        columnList.append('annualtax')
-        valuesList.append(ad.annualTax)
-
-    if ad.advertHTML != '':
-        columnList.append('adverthtml')
-        valuesList.append(ad.advertHTML)
-        
-    if ad.thumbnail != None:
-        columnList.append('thumbnail')
-        valuesList.append(ad.thumbnail)
+    for k in ad.features.keys():
+        columnList.append(k)
+        valuesList.append(ad.features[k])
     
     return (columnList, valuesList)
     
@@ -590,6 +471,8 @@ def writeLog(log):
         
     session.shutdown()
     cluster.shutdown()
+    
+    log = []    # Clear the log to prevetn writing duplicates (since Python only passes lists by reference this also clears the external list)
 
 
 # This function gets the search criterias from the database and creates the search objects from them
@@ -613,20 +496,22 @@ def initialiseSearchCriterias():
     cluster.shutdown()
     
     return scs
-
+    
 
 # The main code block we want to run
-def main():    
-    # Create a log object so we can log all the events and write them to the database
-    log = []
-    
-    
+def main():  
     try:
+        # Get a user agent each call
+        ua = UserAgent()
+        
         # Create a metadata object to use
         md = metadata()
         
         # Instantise the search criteria objects
         scs = initialiseSearchCriterias()
+        
+        # Create a log object so we can log all the events and write them to the database
+        log = []
         
         # Write to log
         msg = 'Found ' + str(len(scs)) + ' searches in database.'
@@ -639,6 +524,13 @@ def main():
             msg = 'Starting search = ' + sc.searchName + '.'
             log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
             print(msg)
+            
+            # Have a longer sleep between named searches to reduce changes of being detected
+            ri = random.randint(120, 360)
+            msg = 'Starting a new search so off for a ' + str(ri) + ' seconds sleep.'
+            log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
+            print(msg)
+            time.sleep(ri)
             
             for j in range(0, len(sc.refinedURLs)):
                 # Write to log
@@ -655,18 +547,21 @@ def main():
                 while masterResultsList == [] or pgNum <= md.maxPages:  # On the first run pgNum = 1 and md.maxPages = 1 but since the master list is empty this will still run first time
                     # Make a random delay to confuse any bot detection algorithms 
                     msg = 'Search results page: ' + str(pgNum) + ' of ' + ('unknown' if (masterResultsList == []) else (str(md.maxPages))) + '.'
-                    if pgNum > 1:
-                        ri = random.randint(4, 12)
-                        msg = msg + ' Going for a ' + str(ri) + ' seconds sleep.'
-                        time.sleep(ri)
                     log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
                     print(msg)
+                    if pgNum > 1:
+                        ri = random.randint(15, 30)
+                        msg = 'Going for a ' + str(ri) + ' seconds sleep.'
+                        log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
+                        print(msg)
+                        time.sleep(ri)
+                    
                     
                     # Append the page number onto the URL to get subsequent pages
                     currentSearchURL = sc.refinedURLs[j] + '&page=' + str(pgNum)
                 
                     # Now run load webpage
-                    response = requests.get(currentSearchURL, headers = {'User-Agent': md.user_agent})
+                    response = requests.get(currentSearchURL, headers = {'User-Agent': ua.random})
                 
                     # Create soup
                     soup = BeautifulSoup(response.text, 'html.parser')
@@ -677,7 +572,7 @@ def main():
                         makesRegex = buildMakesRegex(soup)
                     
                     # Parse first page
-                    resultsList = parsePage(soup, md, makesRegex, log)
+                    resultsList = parsePage(soup, md, ua, makesRegex, log)
             
                     # Concatenate lists together
                     masterResultsList = masterResultsList + resultsList
@@ -686,14 +581,14 @@ def main():
                 
                 msg = writeResults(md, sc, masterResultsList)
                 log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
-        
+                writeLog(log)
         
     except Exception as e:
         msg = ','.join(traceback.format_exception(*sys.exc_info()))
         log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
-        
+        writeLog(log)
     
-    writeLog(log)
+    
 
 
 # This is where any code runs

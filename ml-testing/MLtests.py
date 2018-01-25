@@ -108,8 +108,8 @@ gbr_params = {'loss': ['huber'],
               'min_samples_split': [2, 5, 10, 20],
               'alpha': [0.1, 0.5, 0.9]}
 gbr = GradientBoostingRegressor()
-gbr_gscv = GridSearchCV(gbr, gbr_params, scoring = 'r2', cv = 3)
-gbr_gscv = gbr_gscv.fit(X_train, Y_train)
+gbr_gscv = GridSearchCV(gbr, gbr_params, scoring = 'neg_median_absolute_error', cv = 3)
+gbr_gscv.fit(X_train, Y_train)
 Y_pred_gbr = gbr_gscv.predict(X_test)
 r2_gbr = r2_score(Y_test, Y_pred_gbr)
 ggplot(pd.DataFrame({'actual': Y_test, 'predicted': Y_pred_gbr}), aes(x='actual', y='predicted')) + geom_point()
@@ -117,6 +117,20 @@ ggplot(pd.DataFrame({'actual': Y_test, 'predicted': Y_pred_gbr}), aes(x='actual'
 # Save the model using joblib
 os.chdir('C:/GitWorkspace/ML-car-pricing/scraper')
 joblib.dump(gbr_gscv, 'price_predictor.sav')
+joblib.dump(X_train.columns, 'price_predictor_columns.sav')
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 ##################################################################################

@@ -19,6 +19,7 @@ from urllib import parse
 import pandas as pd
 import datetime
 import io
+from sklearn.externals import joblib
 
 app = Flask(__name__)
 
@@ -72,8 +73,8 @@ def getdata(searchname):
     
     # List columns we want to use as features (or to create features from) and build up cql query
     colListOther = ['advertid', 'plate', 'bodytype', 'transmission', 'fueltype', 'sellertype', 'make', 'model', 'dealername', 'location', 'searchcriteria', 'distancefromyou', 'features', 'adtitle', 'foundtime']
-    colListPlottable = ['year', 'mileage', 'enginesize', 'bhp', 'price', 'averagempg']
-    colListPlottableFriendly = ['Registration Year', 'Mileage (miles)', 'Engine Size (L)', 'Engine Power (BHP)', 'Price (£)', 'Avg. Fuel Consumpt. (mpg)']
+    colListPlottable = ['year', 'mileage', 'enginesize', 'bhp', 'price', 'averagempg', 'predictedprice']
+    colListPlottableFriendly = ['Registration Year', 'Mileage (miles)', 'Engine Size (L)', 'Engine Power (BHP)', 'Price (£)', 'Avg. Fuel Consumpt. (mpg)', 'Predicted Price (£)']
     cql = 'SELECT ' + ','.join(colListPlottable + colListOther) + ' FROM car_pricing.searchdata WHERE searchname = ? AND advertid = ? LIMIT 1;'
     
     prepStatement = session.prepare(cql)
@@ -96,9 +97,26 @@ def getdata(searchname):
     cluster.shutdown()
     
     # Remove any points which are not valid, i.e. NaN, None, etc
+    df_D3data['predictedprice'] = 0
     df_D3data = df_D3data[df_D3data.notnull().all(axis = 1)]
     
-    df_D3data = df_D3data.reset_index()     # Required to generate index for DF so that it can be turned into JSON
+    # Predict price based on parameters and saved model
+    X = pd.get_dummies(df_D3data, dummy_na = False, columns = ['bodytype', 'fueltype', 'make', 'model', 'sellertype'])
+    
+    gbr_gscv = joblib.load('scraper/price_predictor.sav')
+    dfColList = joblib.load('scraper/price_predictor_columns.sav')
+    
+    X = X.reindex(columns = dfColList, fill_value = 0)      # Fill all the one hot encoded columns with zero if they don't exist to ensure model is in correct shape to do predictions
+    
+    df_D3data['predictedprice'] = gbr_gscv.predict(X)
+    
+    # Calculate price difference and add to data frame and column lists
+    df_D3data['pricediff'] = df_D3data['price'] - df_D3data['predictedprice']
+    colListPlottable += ['pricediff']
+    colListPlottableFriendly += ['Price Difference (£)']
+    
+    # Required to generate index for DF so that it can be turned into JSON
+    df_D3data = df_D3data.reset_index()
     
     # Prepare columns for output by sorting in alphabetical order and putting into dictionary for output
     colListPlottableFriendly, colListPlottable = (list(x) for x in zip(*sorted(zip(colListPlottableFriendly, colListPlottable), key = lambda pair: pair[0]))) # Taken from https://stackoverflow.com/questions/13668393/python-sorting-two-lists    
@@ -108,14 +126,6 @@ def getdata(searchname):
                         'plottable_columns': colOutputList})
     
     return response    
-
-
-# Calculate the age of the advert
-def compare_dates(advertid):
-    date = datetime.datetime.strptime(advertid[0:8], '%Y%m%d')    
-    today = datetime.datetime.now()
-    diff = today - date
-    return diff.days
 
 
 # This API returns an image from a specified advert
@@ -147,6 +157,18 @@ def getimage():
                      attachment_filename = 'car.jpg',
                      mimetype = 'image/jpg')
     
+
+""" **********************************************************************************************
+**************** HEREIN STARTS HELPER FUNCTIONS NOT DIRECTLY PART OF API *************************
+********************************************************************************************** """
+
+# Calculate the age of the advert
+def compare_dates(advertid):
+    date = datetime.datetime.strptime(advertid[0:8], '%Y%m%d')    
+    today = datetime.datetime.now()
+    diff = today - date
+    return diff.days
+
 
 # Convert results into data frame including any maps (stolen from https://stackoverflow.com/questions/42420260/how-to-convert-cassandra-map-to-pandas-dataframe)
 def pandas_factory(colnames, rows):
