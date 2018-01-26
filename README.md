@@ -63,3 +63,8 @@ C:\GitHub\ML-car-pricing>python frontend.py
 Now you can navigate to ```http://127.0.0.1:65010/cars``` in your web browser to see the results.
 
 ## Visualisation Overview
+Once everything is working, you should be able to see the following visualisation:
+
+
+
+
