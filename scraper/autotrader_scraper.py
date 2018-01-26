@@ -50,6 +50,7 @@ class searchCriteria:
                              'Car Types': 'onesearchad',
                              'Make': 'make',
                              'Model': 'model',
+                             'Model Variant': 'aggregatedTrim',
                              'Price From': 'price-from',
                              'Price To': 'price-to',
                              'Year From': 'year-from',

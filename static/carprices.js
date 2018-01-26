@@ -58,7 +58,8 @@ var margin = { top: 20, right: 20, bottom: 80, left: 80 },
 	carImageImg = d3.select("#carImageContent").select("img"),
 	adTitleSpan = d3.select("#adTitleText"),
 	keyFactsList = d3.select("#keyFactsList"),
-	priceHistoryList = d3.select("#priceHistoryList");
+	priceHistoryList = d3.select("#priceHistoryList"),
+	externalLink = d3.select("#externalLink");
 
 	
 // setup x 
@@ -491,6 +492,9 @@ function mouseover(d) {
 		// Update the car image
 		var imageAPIURL = '/api/adimage?searchname=' + selectedSearchNameEncoded + '&adid=' + d.advertid;
 		carImageImg.attr("src", imageAPIURL);
+		
+		// Update the hyperlink
+		externalLink.attr("href", d.advertURL);
 		
 		// Update the advert text
 		adTitleSpan.text(d.adtitle);

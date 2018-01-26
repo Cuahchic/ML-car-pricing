@@ -115,6 +115,9 @@ def getdata(searchname):
     colListPlottable += ['pricediff']
     colListPlottableFriendly += ['Price Difference (£)']
     
+    # Add advert URL so you can open it directly in Autotrader
+    df_D3data['advertURL'] = 'https://www.autotrader.co.uk/classified/advert/' + df_D3data['advertid']
+    
     # Required to generate index for DF so that it can be turned into JSON
     df_D3data = df_D3data.reset_index()
     
