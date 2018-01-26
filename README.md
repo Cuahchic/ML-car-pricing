@@ -6,6 +6,8 @@ Written in Python 3.6.3 and uses a version written by [Hamid Adelyear](http://ha
 ## File Structure
 The folder called 'cql-scripts' contains the scripts to create the Cassandra tables.
 
+The folder called 'img' contains an example visualisation image for the README.
+
 The folder called 'ml-testing' contains the data exploration and testing done for creating the ML models. It also can be used to retrain the model using data that has been scraped.
 
 The folder called 'scraper' contains the Python code for doing the web scraping. This can be run on a schedule to regularly pull down data, but be warned that too frequent pulls may result in being IP blocked.
@@ -64,6 +66,36 @@ Now you can navigate to ```http://127.0.0.1:65010/cars``` in your web browser to
 
 ## Visualisation Overview
 Once everything is working, you should be able to see the following visualisation:
+
+[[https://github.com/Cuahchic/ML-car-pricing/blob/master/img/visualisation-image.PNG|alt=example]]
+
+The visualisation is split into 7 sections:
+
+### Controls
+Use the 'Search Name' drop down to choose one of your saved searches to view the results for.
+
+Use the 'x-axis' and 'y-axis' drop downs to choose which variables to display on the scattergram.
+
+### Manufacturers
+This is a donut chart showing the distribution of different car manufacturers in the data. THis will automatically update when the scattergram sliders are changed. Mouseover to get the exact number and percentage of total.
+
+### Image
+This shows the advert title and first image when the user mouseovers a point on the scattergram. The image is clickable and takes you to the advert on the Autotrader website.
+
+### Key Facts
+This shows some key details about the car when the user mouseovers a point on the scattergram.
+
+### Price History
+This shows any prices changes the advert has had when the user mouseovers a point on the scattergram.
+
+### Map
+A map showing the home location (the post code used for the search) in blue and the location of the car in red when the user mouseovers a point on the scattergram. Use the zoom buttons to zoom in and out.
+
+### Scattergram
+There is where the bulk of the action happens. Mouseover a point to populate the Image, Key Facts, Price History and Map sections. Single-left click on a point to freeze the mouseover and allow the image to be clicked.
+
+Use the sliders to zoom the chart axes and update the donut chart as appropriate.
+
 
 
 
