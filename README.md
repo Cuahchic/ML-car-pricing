@@ -25,7 +25,28 @@ CREATE KEYSPACE car_pricing;
 ```
 Once the keyspace has been created, run the ```CREATE TABLE``` commands in the three scripts in the 'cql-scripts' folder.
 
-Now we need to set up search criteria ...
+Now we need to set up search criteria, an example of which can be seen in the 'Example Search Criteria.cql' file under the 'cql-scripts' folder. The key of the map should correspond to the keys as below (this can also be found in the 'autotrader_scraper.py' file, in the 'translations' variable of the 'searchCriteria' class):
+``` Python
+{'Miles From': 'radius',
+ 'Postcode': 'postcode',
+ 'Car Types': 'onesearchad',
+ 'Make': 'make',
+ 'Model': 'model',
+ 'Model Variant': 'aggregatedTrim',
+ 'Price From': 'price-from',
+ 'Price To': 'price-to',
+ 'Year From': 'year-from',
+ 'Year To': 'year-to',
+ 'Mileage From': 'minimum-mileage',
+ 'Mileage To': 'maximum-mileage',
+ 'Body Types': 'body-type',
+ 'Fuel Type': 'fuel-type',
+ 'Engine Size From': 'minimum-badge-engine-size',
+ 'Engine Size To': 'maximum-badge-engine-size',
+ 'Transmission': 'transmission',
+ 'Keywords': 'keywords'}
+```
+Any variables which can have multiple choices, for example 'Car Types', should be stored as a string separated by a comma, e.g. 'New,Used'.
 
 Run the scraper from the command line by first navigating to the directory, then running the script:
 ``` Batchfile
