@@ -105,14 +105,14 @@ def urlRefiner(startSearchURL, params, translations):
     if maxPages <= pagesLimit:
         refinedURLs.append(startSearchURL)
     else:
-        if currentParams['Price From'] == None: # If no price from is specified then use the lowest in the drop down on the page
+        if 'Price From' not in currentParams: # If no price from is specified then use the lowest in the drop down on the page
             sel = soup.find('select', attrs = {'name': 'price-from'})
             opt = sel.findAll('option')
             minPriceFrom = min([int(o['value']) for o in opt if o['value'] != ''])
         else:
             minPriceFrom = int(currentParams['Price From'])
         
-        if currentParams['Price To'] == None: # If no price from is specified then use the highest in the drop down on the page
+        if 'Price To' not in currentParams: # If no price from is specified then use the highest in the drop down on the page
             sel = soup.find('select', attrs = {'name': 'price-to'})
             opt = sel.findAll('option')
             maxPriceFrom = max([int(o['value']) for o in opt if o['value'] != ''])
