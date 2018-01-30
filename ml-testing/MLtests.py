@@ -66,7 +66,19 @@ for searchName in searchNames:
         queryResults = session.execute(prepStatement, [searchName, adID])
         
         df_searchData = df_searchData.append(pd.DataFrame(data = [list(queryResults[0])], columns = colList))   # Note that list is embedded in another list
-        
+
+
+# Here we need to somehow flter adverts so that if they appear in more than one search we only choose the latest one to prevent double weighting
+
+
+
+
+
+
+
+
+
+       
 
 # Create additional features for ML work
 # Calculate the age of the advert

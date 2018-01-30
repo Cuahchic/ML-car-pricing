@@ -426,7 +426,7 @@ def buildOutputs(md, sc, ad):
     
 
 # This function writes all the results we found into the postgres database
-def writeResults(md, sc, masterResultsList):
+def writeResults(md, sc, masterResultsList, log):
     cluster = Cluster()                         # Connect to local host on default port 9042
     session = cluster.connect('car_pricing')    # Connect to car_pricing keyspace
     
@@ -441,14 +441,17 @@ def writeResults(md, sc, masterResultsList):
         cql = 'INSERT INTO searchdata (' + cols + ') VALUES (' + placeholders2 + ');'
         
         prepStatement = session.prepare(cql)            # Prepared statement needs to stay inside of the loop as each advert has different available data so will be of differring length
-        session.execute(prepStatement, valuesList)      # Need a loop here to handle each advert inside 
+        cmdName = 'insert advert ' + ad.advertid
+        tryDatabaseCommand(session, prepStatement, valuesList, log, md, cmdName)
         
         rows += 1
     
     # Update the searchqueries table so we know when they were last run
     cql = 'UPDATE car_pricing.searchqueries SET lastruntime = ? WHERE searchname = ?;'
     prepStatement = session.prepare(cql)
-    session.execute(prepStatement, [datetime.datetime.now(), sc.searchName])
+    cmdName = 'update searchqueries table lastruntime'
+    valuesList = [datetime.datetime.now(), sc.searchName]
+    tryDatabaseCommand(session, prepStatement, valuesList, log, md, cmdName)
     
     # Shut down connection
     session.shutdown()
@@ -458,14 +461,16 @@ def writeResults(md, sc, masterResultsList):
 
 
 # This function writes the log to the database so we can debug any errors
-def writeLog(log):
+def writeLog(md, log):
     cluster = Cluster()                         # Connect to local host on default port 9042
     session = cluster.connect('car_pricing')    # Connect to car_pricing keyspace
     cql = 'INSERT INTO log (sessioncreatedtime, logtime, message) VALUES (?, ?, ?);'    
     prepStatement = session.prepare(cql)        # Prepared statement only needs sent to server once and be executed multiple times as below, better for performance
         
     for l in log:
-        session.execute(prepStatement, l)
+        cmdName = 'insert into log'
+        valuesList = l
+        tryDatabaseCommand(session, prepStatement, valuesList, log, md, cmdName)
         
     session.shutdown()
     cluster.shutdown()
@@ -482,7 +487,7 @@ def initialiseSearchCriterias():
     session = cluster.connect('car_pricing')    # Connect to car_pricing keyspace
     cql = 'SELECT searchname, searchcriteria, lastruntime FROM car_pricing.searchqueries;'    
     prepStatement = session.prepare(cql)        # Prepared statement only needs sent to server once and be executed multiple times as below, better for performance
-        
+
     queryResults = session.execute(prepStatement)
     
     for qr in queryResults:
@@ -501,6 +506,29 @@ def initialiseSearchCriterias():
     cluster.shutdown()
     
     return scs
+
+
+# This function tries to execute a prepared statement up to a certain number of tries in case of database error
+def tryDatabaseCommand(session, prepStatement, valuesList, log, md, cmdName, maxRetries = 5, sleepTime = 3):
+    result = None
+    retryCount = 0
+    while result is None:
+        retryCount += 1
+        try:
+            session.execute(prepStatement, valuesList)      # Need a loop here to handle each advert inside 
+            result = True
+        except:
+            if retryCount <= maxRetries:
+                msg = 'Execution of ' + cmdName + ' failed on try ' + str(retryCount) + ' of ' + str(maxRetries) + ', going for a ' + str(sleepTime) + ' seconds sleep.'
+                log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
+                print(msg)
+                time.sleep(sleepTime)
+                pass
+            else:
+                msg = 'Execution of ' + cmdName + ' failed completely after ' + str(maxRetries) + ' attempts.'
+                log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
+                print(msg)
+                result = False    
     
 
 # The main code block we want to run
@@ -584,14 +612,14 @@ def main():
                     
                     pgNum += 1
                 
-                msg = writeResults(md, sc, masterResultsList)
+                msg = writeResults(md, sc, masterResultsList, log)
                 log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
-                writeLog(log)
+                writeLog(md, log)
         
     except Exception as e:
         msg = ','.join(traceback.format_exception(*sys.exc_info()))
         log.append([md.sessionCreatedTime, datetime.datetime.now(), msg])
-        writeLog(log)
+        writeLog(md, log)
     
     
 
