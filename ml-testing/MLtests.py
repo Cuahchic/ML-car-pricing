@@ -69,16 +69,10 @@ for searchName in searchNames:
 
 
 # Here we need to somehow flter adverts so that if they appear in more than one search we only choose the latest one to prevent double weighting
+df_searchData.sort_values(by = ['foundtime'], ascending = True, inplace = True)
 
-
-
-
-
-
-
-
-
-       
+df_searchData = df_searchData[df_searchData.duplicated(subset = ['advertid'], keep = 'first')]  # Not sure why keep is first here?
+ 
 
 # Create additional features for ML work
 # Calculate the age of the advert
@@ -109,8 +103,6 @@ X.drop(['price'], axis = 1, inplace = True)
 X, Y = shuffle(X, Y)                    # Randomise the order of the rows
 
 X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size = 0.05, random_state = 32)
-
-
 
 
 # Predictions using gradient boosted regression

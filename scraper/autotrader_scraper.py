@@ -441,7 +441,7 @@ def writeResults(md, sc, masterResultsList, log):
         cql = 'INSERT INTO searchdata (' + cols + ') VALUES (' + placeholders2 + ');'
         
         prepStatement = session.prepare(cql)            # Prepared statement needs to stay inside of the loop as each advert has different available data so will be of differring length
-        cmdName = 'insert advert ' + ad.advertid
+        cmdName = 'insert advert ' + ad.features['advertid']
         tryDatabaseCommand(session, prepStatement, valuesList, log, md, cmdName)
         
         rows += 1
