@@ -59,6 +59,7 @@ class searchCriteria:
                              'Mileage To': 'maximum-mileage',
                              'Body Types': 'body-type',
                              'Fuel Type': 'fuel-type',
+                             'Fuel Consumption': 'fuel-consumption',
                              'Engine Size From': 'minimum-badge-engine-size',
                              'Engine Size To': 'maximum-badge-engine-size',
                              'Transmission': 'transmission',
@@ -147,16 +148,6 @@ class metadata:
         
         self.codeVersion = '1.0.0'
         self.hostName = socket.gethostname()
-
-"""
-# Randomly choose one of the previously defined user agents
-def pickAgent():
-    # Open file with lots of user agents to choose from, so we can confuse any bot detection algorithms
-    with open('UserAgents.csv', 'r') as f:
-        reader = csv.reader(f)
-        user_agents = list(reader)      # Returns this as a list of lists (if the CSV had multiple columns these would be in sublist)
-    
-    return random.choice(user_agents)[0]"""
 
 
 # Find the maximum number of pages from a search result page
@@ -454,6 +445,12 @@ def writeResults(md, sc, masterResultsList):
         
         rows += 1
     
+    # Update the searchqueries table so we know when they were last run
+    cql = 'UPDATE car_pricing.searchqueries SET lastruntime = ? WHERE searchname = ?;'
+    prepStatement = session.prepare(cql)
+    session.execute(prepStatement, [datetime.datetime.now(), sc.searchName])
+    
+    # Shut down connection
     session.shutdown()
     cluster.shutdown()
     
@@ -483,15 +480,22 @@ def initialiseSearchCriterias():
     
     cluster = Cluster()                         # Connect to local host on default port 9042
     session = cluster.connect('car_pricing')    # Connect to car_pricing keyspace
-    cql = 'SELECT searchname, searchcriteria FROM car_pricing.searchqueries;'    
+    cql = 'SELECT searchname, searchcriteria, lastruntime FROM car_pricing.searchqueries;'    
     prepStatement = session.prepare(cql)        # Prepared statement only needs sent to server once and be executed multiple times as below, better for performance
         
     queryResults = session.execute(prepStatement)
     
     for qr in queryResults:
-        sc = searchCriteria(qr[0], qr[1])
+        if qr[2] != None:
+            lastruntime = qr[2]
+        else:
+            lastruntime = datetime.datetime.strptime('2000-01-01', '%Y-%m-%d')
         
-        scs.append(sc)
+        # Only include search if run more than 7 days ago
+        if (lastruntime + datetime.timedelta(days = 7) < datetime.datetime.now()):
+            sc = searchCriteria(qr[0], qr[1])
+            
+            scs.append(sc)
         
     session.shutdown()
     cluster.shutdown()
