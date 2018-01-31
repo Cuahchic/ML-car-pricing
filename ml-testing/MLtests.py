@@ -70,8 +70,13 @@ for searchName in searchNames:
 
 # Here we need to somehow flter adverts so that if they appear in more than one search we only choose the latest one to prevent double weighting
 df_searchData.sort_values(by = ['foundtime'], ascending = True, inplace = True)
+adIDs = df_searchData[df_searchData.duplicated(subset = ['advertid'], keep = False)]['advertid'].unique()
 
-df_searchData = df_searchData[df_searchData.duplicated(subset = ['advertid'], keep = 'first')]  # Not sure why keep is first here?
+for adID in adIDs:
+    df_current_ad = df_searchData[df_searchData['advertid'] == adID]
+    df_current_ad.sort_values(by = ['foundtime'], ascending = False, inplace = True)
+    
+    df_searchData = df_searchData[df_searchData['advertid'] != adID].append(df_current_ad.head(1))
  
 
 # Create additional features for ML work
@@ -123,7 +128,9 @@ os.chdir('C:/GitWorkspace/ML-car-pricing/scraper')
 joblib.dump(gbr_gscv, 'price_predictor.sav')
 joblib.dump(X_train.columns, 'price_predictor_columns.sav')
 
-
+# Save the ggplot to a folder
+p = ggplot(pd.DataFrame({'actual': Y, 'predicted': gbr_gscv.predict(X)}), aes(x='actual', y='predicted')) + geom_point()
+p.save(filename = '../ml-testing/Actual vs Predicted Prices.png', dpi = 180)
 
 
 
