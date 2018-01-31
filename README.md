@@ -28,7 +28,7 @@ CREATE KEYSPACE car_pricing;
 Once the keyspace has been created, run the ```CREATE TABLE``` commands in the three scripts in the 'cql-scripts' folder.
 
 Now we need to set up search criteria, an example of which can be seen in the 'Example Search Criteria.cql' file under the 'cql-scripts' folder. The key of the map should correspond to the keys as below (this can also be found in the 'autotrader_scraper.py' file, in the 'translations' variable of the 'searchCriteria' class):
-```json
+```
 {'Miles From': 'radius',
  'Postcode': 'postcode',
  'Car Types': 'onesearchad',
@@ -85,7 +85,6 @@ For some algorithms, categorical features need to be [one-hot encoded](https://h
 There were three algorithms considered - [Gradient Boosted Regression](https://machinelearningmastery.com/gentle-introduction-gradient-boosting-algorithm-machine-learning/), [Random Forest Regression](https://www.r-bloggers.com/how-random-forests-improve-simple-regression-trees/) and [k-Nearest Neighbours Regression](http://www.saedsayad.com/k_nearest_neighbors_reg.htm). Using Grid Search with 3-fold cross validation for each of these, they were compared and it was found that Gradient Boosted Regression minimised the median average deviation the most.
 
 With the optimum parameters found, the predicted vs actual price looked as follows:
-
 ![ML results](https://github.com/Cuahchic/ML-car-pricing/blob/master/ml-testing/Actual%20vs%20Predicted%20Prices.png)
 
 It's worth remembering that the goal here is to predict car prices, but those prices are being set by car salespeople, and are inherently flawed (i.e. they don't represent the global solution). With enough data, the salespersons prices should average out to get a good picture of the price differences.
